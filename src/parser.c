@@ -1,4 +1,5 @@
 #include "../include/parser.h"
+#include "../include/symbol_table.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -23,10 +24,13 @@ static ASTNode *parse_unary(Parser *parser);
 static ASTNode *parse_if_statement(Parser *parser);
 static ASTNode *parse_while_statement(Parser *parser);
 static ASTNode *parse_for_statement(Parser *parser);
+static ASTNode *parse_switch_statement(Parser *parser);
+static ASTNode *parse_do_while_statement(Parser *parser);
 static ASTNode *parse_var_declaration(Parser *parser);
 static ASTNode *parse_struct_definition(Parser *parser);
 static ASTNode *parse_typedef(Parser *parser);
 static ASTNode *parse_enum_definition(Parser *parser);
+static ASTNode *parse_union_definition(Parser *parser);
 static int get_precedence(TokenType type);
 static int is_binary_operator(TokenType type);
 static int is_unary_operator(TokenType type);
@@ -54,6 +58,7 @@ Parser *parser_create(Token **tokens, int token_count)
 	parser->token_count = token_count;
 	parser->current = 0;
 	parser->error_count = 0;
+	parser->symbols = symbol_table_create(NULL);
 
 	return (parser);
 }
@@ -66,6 +71,9 @@ void parser_destroy(Parser *parser)
 {
 	if (!parser)
 		return;
+
+	if (parser->symbols)
+		symbol_table_destroy(parser->symbols);
 
 	free(parser);
 }
@@ -84,6 +92,64 @@ static int is_at_end(Parser *parser)
 {
 	return (parser->current >= parser->token_count ||
 		parser->tokens[parser->current]->type == TOK_EOF);
+}
+
+/*
+ * peek_ahead - Look ahead n tokens (skipping whitespace/newlines/comments)
+ * @parser: Parser instance
+ * @n: How many non-whitespace tokens to look ahead (0 = current)
+ *
+ * Return: Token at position, or NULL if at end
+ */
+static Token *peek_ahead(Parser *parser, int n)
+{
+	int pos = parser->current;
+	int count = 0;
+
+	while (pos < parser->token_count)
+	{
+		Token *t = parser->tokens[pos];
+
+		if (t->type != TOK_WHITESPACE && t->type != TOK_NEWLINE &&
+		    t->type != TOK_COMMENT_LINE && t->type != TOK_COMMENT_BLOCK)
+		{
+			if (count == n)
+				return (t);
+			count++;
+		}
+		pos++;
+	}
+	return (NULL);
+}
+
+/*
+ * looks_like_ptr_declaration - Check if tokens look like "Type *var"
+ * @parser: Parser instance
+ *
+ * Heuristic: IDENTIFIER STAR IDENTIFIER followed by ; or , or = or [
+ * Return: 1 if looks like declaration, 0 otherwise
+ */
+static int looks_like_ptr_declaration(Parser *parser)
+{
+	Token *t0 = peek_ahead(parser, 0);
+	Token *t1 = peek_ahead(parser, 1);
+	Token *t2 = peek_ahead(parser, 2);
+	Token *t3 = peek_ahead(parser, 3);
+
+	if (!t0 || !t1 || !t2)
+		return (0);
+
+	/* Pattern: IDENTIFIER * IDENTIFIER (;|,|=|[) */
+	if (t0->type == TOK_IDENTIFIER &&
+	    t1->type == TOK_STAR &&
+	    t2->type == TOK_IDENTIFIER &&
+	    t3 && (t3->type == TOK_SEMICOLON || t3->type == TOK_COMMA ||
+		   t3->type == TOK_ASSIGN || t3->type == TOK_LBRACKET))
+	{
+		return (1);
+	}
+
+	return (0);
 }
 
 /*
@@ -152,7 +218,32 @@ static Token *expect(Parser *parser, TokenType type)
 }
 
 /*
- * skip_whitespace - Skip whitespace and newline tokens
+ * sync_to_semicolon - Skip tokens until we find a semicolon or closing brace
+ * @parser: Parser instance
+ *
+ * Used for error recovery to skip past malformed statements
+ */
+static void sync_to_semicolon(Parser *parser)
+{
+	while (!is_at_end(parser))
+	{
+		Token *token = peek(parser);
+
+		if (!token)
+			break;
+		if (token->type == TOK_SEMICOLON)
+		{
+			advance(parser);
+			break;
+		}
+		if (token->type == TOK_RBRACE)
+			break;
+		advance(parser);
+	}
+}
+
+/*
+ * skip_whitespace - Skip whitespace, newlines, and comments
  * @parser: Parser instance
  */
 static void skip_whitespace(Parser *parser)
@@ -163,7 +254,9 @@ static void skip_whitespace(Parser *parser)
 	{
 		token = peek(parser);
 		if (token->type == TOK_WHITESPACE ||
-		    token->type == TOK_NEWLINE)
+		    token->type == TOK_NEWLINE ||
+		    token->type == TOK_COMMENT_LINE ||
+		    token->type == TOK_COMMENT_BLOCK)
 			advance(parser);
 		else
 			break;
@@ -199,6 +292,11 @@ static int get_precedence(TokenType type)
 	case TOK_STAR_ASSIGN:
 	case TOK_SLASH_ASSIGN:
 	case TOK_PERCENT_ASSIGN:
+	case TOK_AMPERSAND_ASSIGN:
+	case TOK_PIPE_ASSIGN:
+	case TOK_CARET_ASSIGN:
+	case TOK_LSHIFT_ASSIGN:
+	case TOK_RSHIFT_ASSIGN:
 		return (1); /* Assignment (right-to-left) */
 	case TOK_LOGICAL_OR:
 		return (2);
@@ -324,10 +422,42 @@ static ASTNode *parse_primary(Parser *parser)
 		return (node);
 	}
 
-	/* Parenthesized expression */
+	/* Parenthesized expression or type cast */
 	if (token->type == TOK_LPAREN)
 	{
 		advance(parser);
+		skip_whitespace(parser);
+		token = peek(parser);
+
+		/* Check if this is a type cast */
+		if (token && is_type_keyword(token->type))
+		{
+			/* Type cast: (type)expression */
+			ASTNode *cast_node = ast_node_create(NODE_CAST, token);
+
+			/* Skip over the type (including any pointer stars) */
+			while (!is_at_end(parser))
+			{
+				token = peek(parser);
+				if (!token)
+					break;
+				if (token->type == TOK_RPAREN)
+					break;
+				advance(parser);
+				skip_whitespace(parser);
+			}
+
+			expect(parser, TOK_RPAREN);
+			skip_whitespace(parser);
+
+			/* Parse the expression being cast */
+			node = parse_unary(parser);
+			if (node)
+				ast_node_add_child(cast_node, node);
+			return (cast_node);
+		}
+
+		/* Regular parenthesized expression */
 		node = parse_expression(parser);
 		skip_whitespace(parser);
 		expect(parser, TOK_RPAREN);
@@ -342,25 +472,95 @@ static ASTNode *parse_primary(Parser *parser)
  */
 static ASTNode *parse_postfix(Parser *parser)
 {
-	ASTNode *node;
-	Token *op_token;
+	ASTNode *node = NULL;
+	Token *token = NULL;
 
 	node = parse_primary(parser);
 	if (!node)
 		return (NULL);
 
-	skip_whitespace(parser);
-	op_token = peek(parser);
-
-	/* Check for postfix ++ or -- */
-	if (op_token && (op_token->type == TOK_INCREMENT ||
-	    op_token->type == TOK_DECREMENT))
+	/* Handle repeated postfix operations: array access, calls, member access, postfix ++/-- */
+	for (;;)
 	{
-		ASTNode *postfix = ast_node_create(NODE_UNARY, op_token);
+		skip_whitespace(parser);
+		token = peek(parser);
+		if (!token)
+			break;
 
-		advance(parser);
-		ast_node_add_child(postfix, node);
-		return (postfix);
+		/* Array access: expr[ index ] */
+		if (token->type == TOK_LBRACKET)
+		{
+			ASTNode *arr_access = ast_node_create(NODE_ARRAY_ACCESS, NULL);
+
+			advance(parser); /* consume [ */
+			ast_node_add_child(arr_access, node);
+			skip_whitespace(parser);
+			ast_node_add_child(arr_access, parse_expression(parser));
+			skip_whitespace(parser);
+			expect(parser, TOK_RBRACKET);
+			node = arr_access;
+			continue;
+		}
+
+		/* Function call: expr(args...) */
+		if (token->type == TOK_LPAREN)
+		{
+			ASTNode *call = ast_node_create(NODE_CALL, NULL);
+
+			advance(parser); /* consume ( */
+			/* callee as first child */
+			ast_node_add_child(call, node);
+			skip_whitespace(parser);
+
+			/* Parse arguments */
+			while (!is_at_end(parser) && !match(parser, TOK_RPAREN))
+			{
+				ASTNode *arg = parse_expression(parser);
+				if (arg)
+					ast_node_add_child(call, arg);
+				skip_whitespace(parser);
+				if (match(parser, TOK_COMMA))
+					advance(parser);
+				skip_whitespace(parser);
+			}
+
+			expect(parser, TOK_RPAREN);
+			node = call;
+			continue;
+		}
+
+		/* Member access: .identifier or ->identifier */
+		if (token->type == TOK_DOT || token->type == TOK_ARROW)
+		{
+			ASTNode *member = NULL;
+			Token *name_token = NULL;
+
+			advance(parser); /* consume . or -> */
+			skip_whitespace(parser);
+
+			/* Expect an identifier for the member name */
+			name_token = expect(parser, TOK_IDENTIFIER);
+			if (!name_token)
+				return (NULL);
+
+			member = ast_node_create(NODE_MEMBER_ACCESS, name_token);
+			/* first child is the object, second implicitly the name via token */
+			ast_node_add_child(member, node);
+			node = member;
+			continue;
+		}
+
+		/* Postfix ++ or -- */
+		if (token->type == TOK_INCREMENT || token->type == TOK_DECREMENT)
+		{
+			ASTNode *postfix = ast_node_create(NODE_UNARY, token);
+			advance(parser);
+			ast_node_add_child(postfix, node);
+			node = postfix;
+			continue;
+		}
+
+		break;
 	}
 
 	return (node);
@@ -380,7 +580,59 @@ static ASTNode *parse_unary(Parser *parser)
 	if (!token)
 		return (NULL);
 
-	/* Check for unary operators */
+	/* Handle sizeof as a special unary operator */
+	if (token->type == TOK_SIZEOF)
+	{
+		node = ast_node_create(NODE_SIZEOF, token);
+		advance(parser);
+		skip_whitespace(parser);
+
+		/* sizeof can be followed by a parenthesized type or expression */
+		if (match(parser, TOK_LPAREN))
+		{
+			Token *next;
+
+			advance(parser);
+			skip_whitespace(parser);
+			next = peek(parser);
+
+			/* Check if it's sizeof(type) - type is a keyword or typedef */
+			if (next && (is_type_keyword(next->type) ||
+			    (next->type == TOK_IDENTIFIER &&
+			     symbol_is_typedef(parser->symbols, next->lexeme))))
+			{
+				/* Store the type token in data field */
+				node->data = next;
+
+				/* Consume the type (possibly multiple tokens like unsigned int) */
+				while (!is_at_end(parser) && !match(parser, TOK_RPAREN))
+				{
+					advance(parser);
+					skip_whitespace(parser);
+				}
+				expect(parser, TOK_RPAREN);
+			}
+			else
+			{
+				/* It's sizeof(expression) */
+				operand = parse_expression(parser);
+				if (operand)
+					ast_node_add_child(node, operand);
+				skip_whitespace(parser);
+				expect(parser, TOK_RPAREN);
+			}
+		}
+		else
+		{
+			operand = parse_unary(parser);
+			if (operand)
+				ast_node_add_child(node, operand);
+		}
+
+		return (node);
+	}
+
+	/* Check for other unary operators */
 	if (is_unary_operator(token->type))
 	{
 		node = ast_node_create(NODE_UNARY, token);
@@ -415,7 +667,43 @@ static ASTNode *parse_expression_precedence(Parser *parser, int min_precedence)
 	while (!is_at_end(parser))
 	{
 		op_token = peek(parser);
-		if (!op_token || !is_binary_operator(op_token->type))
+		if (!op_token)
+			break;
+
+		/* Handle ternary operator */
+		if (op_token->type == TOK_QUESTION)
+		{
+			ASTNode *ternary, *then_expr, *else_expr;
+
+			advance(parser); /* consume ? */
+			skip_whitespace(parser);
+
+			then_expr = parse_expression(parser);
+			skip_whitespace(parser);
+
+			if (!expect(parser, TOK_COLON))
+			{
+				ast_node_destroy(left);
+				ast_node_destroy(then_expr);
+				return (NULL);
+			}
+
+			skip_whitespace(parser);
+			else_expr = parse_expression_precedence(parser, min_precedence);
+
+			ternary = ast_node_create(NODE_TERNARY, op_token);
+			ast_node_add_child(ternary, left);
+			if (then_expr)
+				ast_node_add_child(ternary, then_expr);
+			if (else_expr)
+				ast_node_add_child(ternary, else_expr);
+
+			left = ternary;
+			skip_whitespace(parser);
+			continue;
+		}
+
+		if (!is_binary_operator(op_token->type))
 			break;
 
 		precedence = get_precedence(op_token->type);
@@ -465,17 +753,49 @@ static ASTNode *parse_var_declaration(Parser *parser)
 {
 	Token *type_token, *name_token;
 	ASTNode *node;
+	int is_typedef_type = 0;
 
 	skip_whitespace(parser);
 	type_token = peek(parser);
 
-	if (!type_token || !is_type_keyword(type_token->type))
+	if (!type_token)
 		return (NULL);
 
-	advance(parser); /* consume type */
-	skip_whitespace(parser);
+	/* Check if it's a built-in type keyword */
+	if (is_type_keyword(type_token->type))
+	{
+		advance(parser); /* consume first type keyword */
+		skip_whitespace(parser);
 
-	/* Handle pointer declarations: int *ptr */
+		/* Handle compound types: unsigned int, long long, const static int, etc. */
+		while (peek(parser) && is_type_keyword(peek(parser)->type))
+		{
+			advance(parser);
+			skip_whitespace(parser);
+		}
+	}
+	/* Check if it's a typedef'd type */
+	else if (type_token->type == TOK_IDENTIFIER &&
+		 symbol_is_typedef(parser->symbols, type_token->lexeme))
+	{
+		is_typedef_type = 1;
+		advance(parser); /* consume typedef name */
+		skip_whitespace(parser);
+	}
+	/* Heuristic: unknown identifier that looks like a type (from headers) */
+	else if (type_token->type == TOK_IDENTIFIER &&
+		 looks_like_ptr_declaration(parser))
+	{
+		is_typedef_type = 1;
+		advance(parser); /* consume unknown type name */
+		skip_whitespace(parser);
+	}
+	else
+	{
+		return (NULL);
+	}
+
+	/* Handle pointer declarations: int *ptr or node_t *node */
 	while (match(parser, TOK_STAR))
 	{
 		advance(parser);
@@ -487,6 +807,11 @@ static ASTNode *parse_var_declaration(Parser *parser)
 		return (NULL);
 
 	node = ast_node_create(NODE_VAR_DECL, type_token);
+	node->data = name_token;  /* Store variable name in data field */
+	skip_whitespace(parser);
+
+	/* Suppress unused variable warning */
+	(void)is_typedef_type;
 	skip_whitespace(parser);
 
 	/* Handle array declarations: int arr[] or int arr[10] */
@@ -661,13 +986,24 @@ static ASTNode *parse_for_statement(Parser *parser)
 
 	node = ast_node_create(NODE_FOR, NULL);
 
-	/* Initialization */
+	/* Initialization - handle comma expressions like: i = 0, j = n - 1 */
 	skip_whitespace(parser);
 	if (!match(parser, TOK_SEMICOLON))
 	{
 		init = parse_expression(parser);
 		if (init)
 			ast_node_add_child(node, init);
+		skip_whitespace(parser);
+		/* Handle comma operator in for init */
+		while (match(parser, TOK_COMMA))
+		{
+			advance(parser);
+			skip_whitespace(parser);
+			init = parse_expression(parser);
+			if (init)
+				ast_node_add_child(node, init);
+			skip_whitespace(parser);
+		}
 	}
 	skip_whitespace(parser);
 	expect(parser, TOK_SEMICOLON);
@@ -683,13 +1019,24 @@ static ASTNode *parse_for_statement(Parser *parser)
 	skip_whitespace(parser);
 	expect(parser, TOK_SEMICOLON);
 
-	/* Increment */
+	/* Increment - handle comma expressions like: i++, j-- */
 	skip_whitespace(parser);
 	if (!match(parser, TOK_RPAREN))
 	{
 		increment = parse_expression(parser);
 		if (increment)
 			ast_node_add_child(node, increment);
+		skip_whitespace(parser);
+		/* Handle comma operator in for increment */
+		while (match(parser, TOK_COMMA))
+		{
+			advance(parser);
+			skip_whitespace(parser);
+			increment = parse_expression(parser);
+			if (increment)
+				ast_node_add_child(node, increment);
+			skip_whitespace(parser);
+		}
 	}
 	skip_whitespace(parser);
 	expect(parser, TOK_RPAREN);
@@ -699,6 +1046,173 @@ static ASTNode *parse_for_statement(Parser *parser)
 	body = parse_statement(parser);
 	if (body)
 		ast_node_add_child(node, body);
+
+	return (node);
+}
+
+/*
+ * parse_switch_statement - Parse switch statement
+ * @parser: Parser instance
+ *
+ * Return: Switch AST node, or NULL on error
+ */
+static ASTNode *parse_switch_statement(Parser *parser)
+{
+	ASTNode *node, *expr, *case_node;
+	Token *token;
+
+	advance(parser); /* consume 'switch' */
+	skip_whitespace(parser);
+
+	if (!expect(parser, TOK_LPAREN))
+		return (NULL);
+
+	expr = parse_expression(parser);
+	skip_whitespace(parser);
+
+	if (!expect(parser, TOK_RPAREN))
+	{
+		ast_node_destroy(expr);
+		return (NULL);
+	}
+
+	node = ast_node_create(NODE_SWITCH, NULL);
+	if (expr)
+		ast_node_add_child(node, expr);
+
+	skip_whitespace(parser);
+
+	/* Parse switch body */
+	if (!expect(parser, TOK_LBRACE))
+	{
+		ast_node_destroy(node);
+		return (NULL);
+	}
+
+	skip_whitespace(parser);
+
+	/* Parse cases and default */
+	while (!is_at_end(parser) && !match(parser, TOK_RBRACE))
+	{
+		skip_whitespace(parser);
+		token = peek(parser);
+
+		if (!token)
+			break;
+
+		if (token->type == TOK_CASE)
+		{
+			advance(parser); /* consume 'case' */
+			skip_whitespace(parser);
+
+			case_node = ast_node_create(NODE_CASE, token);
+
+			/* Parse case value */
+			ASTNode *case_val = parse_expression(parser);
+			if (case_val)
+				ast_node_add_child(case_node, case_val);
+
+			skip_whitespace(parser);
+			expect(parser, TOK_COLON);
+			skip_whitespace(parser);
+
+			/* Parse statements until next case/default/rbrace */
+			while (!is_at_end(parser) &&
+			       !match(parser, TOK_CASE) &&
+			       !match(parser, TOK_DEFAULT) &&
+			       !match(parser, TOK_RBRACE))
+			{
+				ASTNode *stmt = parse_statement(parser);
+				if (stmt)
+					ast_node_add_child(case_node, stmt);
+				skip_whitespace(parser);
+			}
+
+			ast_node_add_child(node, case_node);
+		}
+		else if (token->type == TOK_DEFAULT)
+		{
+			advance(parser); /* consume 'default' */
+			skip_whitespace(parser);
+			expect(parser, TOK_COLON);
+			skip_whitespace(parser);
+
+			case_node = ast_node_create(NODE_CASE, token);
+
+			/* Parse statements until next case/rbrace */
+			while (!is_at_end(parser) &&
+			       !match(parser, TOK_CASE) &&
+			       !match(parser, TOK_RBRACE))
+			{
+				ASTNode *stmt = parse_statement(parser);
+				if (stmt)
+					ast_node_add_child(case_node, stmt);
+				skip_whitespace(parser);
+			}
+
+			ast_node_add_child(node, case_node);
+		}
+		else
+		{
+			/* Skip unexpected tokens */
+			advance(parser);
+		}
+	}
+
+	expect(parser, TOK_RBRACE);
+
+	return (node);
+}
+
+/*
+ * parse_do_while_statement - Parse do-while loop
+ * @parser: Parser instance
+ *
+ * Return: Do-while AST node, or NULL on error
+ */
+static ASTNode *parse_do_while_statement(Parser *parser)
+{
+	ASTNode *node, *body, *condition;
+
+	advance(parser); /* consume 'do' */
+	skip_whitespace(parser);
+
+	body = parse_statement(parser);
+
+	skip_whitespace(parser);
+
+	if (!expect(parser, TOK_WHILE))
+	{
+		ast_node_destroy(body);
+		return (NULL);
+	}
+
+	skip_whitespace(parser);
+
+	if (!expect(parser, TOK_LPAREN))
+	{
+		ast_node_destroy(body);
+		return (NULL);
+	}
+
+	condition = parse_expression(parser);
+	skip_whitespace(parser);
+
+	if (!expect(parser, TOK_RPAREN))
+	{
+		ast_node_destroy(body);
+		ast_node_destroy(condition);
+		return (NULL);
+	}
+
+	skip_whitespace(parser);
+	expect(parser, TOK_SEMICOLON);
+
+	node = ast_node_create(NODE_DO_WHILE, NULL);
+	if (body)
+		ast_node_add_child(node, body);
+	if (condition)
+		ast_node_add_child(node, condition);
 
 	return (node);
 }
@@ -772,6 +1286,12 @@ static ASTNode *parse_statement(Parser *parser)
 	if (token->type == TOK_FOR)
 		return (parse_for_statement(parser));
 
+	if (token->type == TOK_SWITCH)
+		return (parse_switch_statement(parser));
+
+	if (token->type == TOK_DO)
+		return (parse_do_while_statement(parser));
+
 	/* Return statement */
 	if (token->type == TOK_RETURN)
 	{
@@ -817,8 +1337,18 @@ static ASTNode *parse_statement(Parser *parser)
 	if (token->type == TOK_LBRACE)
 		return (parse_block(parser));
 
-	/* Variable declaration */
+	/* Variable declaration (built-in types) */
 	if (is_type_keyword(token->type))
+		return (parse_var_declaration(parser));
+
+	/* Variable declaration (typedef'd types from symbol table) */
+	if (token->type == TOK_IDENTIFIER &&
+	    symbol_is_typedef(parser->symbols, token->lexeme))
+		return (parse_var_declaration(parser));
+
+	/* Variable declaration (heuristic: unknown type from headers) */
+	/* Pattern: Identifier *var; or Identifier *var, ... */
+	if (token->type == TOK_IDENTIFIER && looks_like_ptr_declaration(parser))
 		return (parse_var_declaration(parser));
 
 	/* Expression statement */
@@ -830,7 +1360,11 @@ static ASTNode *parse_statement(Parser *parser)
 		if (expr)
 			ast_node_add_child(node, expr);
 		skip_whitespace(parser);
-		expect(parser, TOK_SEMICOLON);
+		if (!expect(parser, TOK_SEMICOLON))
+		{
+			/* Error recovery: skip to next semicolon or brace */
+			sync_to_semicolon(parser);
+		}
 	}
 
 	return (node);
@@ -929,6 +1463,58 @@ static ASTNode *parse_enum_definition(Parser *parser)
 }
 
 /*
+ * parse_union_definition - Parse union definition
+ */
+static ASTNode *parse_union_definition(Parser *parser)
+{
+	Token *name_token = NULL;
+	ASTNode *node;
+
+	advance(parser); /* consume 'union' */
+	skip_whitespace(parser);
+
+	/* Union name is optional */
+	if (match(parser, TOK_IDENTIFIER))
+	{
+		name_token = peek(parser);
+		advance(parser);
+		skip_whitespace(parser);
+	}
+
+	node = ast_node_create(NODE_STRUCT, name_token); /* Reuse STRUCT node type */
+
+	/* Parse union body if present */
+	if (match(parser, TOK_LBRACE))
+	{
+		advance(parser); /* consume { */
+		skip_whitespace(parser);
+
+		/* Parse union members (simplified - just consume until semicolon) */
+		while (!is_at_end(parser) && !match(parser, TOK_RBRACE))
+		{
+			skip_whitespace(parser);
+			if (match(parser, TOK_RBRACE))
+				break;
+
+			/* Parse member declaration */
+			while (!is_at_end(parser) && !match(parser, TOK_SEMICOLON))
+			{
+				advance(parser);
+				skip_whitespace(parser);
+			}
+
+			if (match(parser, TOK_SEMICOLON))
+				advance(parser);
+			skip_whitespace(parser);
+		}
+
+		expect(parser, TOK_RBRACE);
+	}
+
+	return (node);
+}
+
+/*
  * parse_typedef - Parse typedef declaration
  */
 static ASTNode *parse_typedef(Parser *parser)
@@ -968,6 +1554,19 @@ static ASTNode *parse_typedef(Parser *parser)
 			advance(parser);
 		}
 	}
+	else if (match(parser, TOK_UNION))
+	{
+		inner = parse_union_definition(parser);
+		if (inner)
+			ast_node_add_child(node, inner);
+		skip_whitespace(parser);
+		/* Get the typedef alias name after the union */
+		if (match(parser, TOK_IDENTIFIER))
+		{
+			node->token = peek(parser);
+			advance(parser);
+		}
+	}
 	else
 	{
 		/* Regular typedef - consume until we find the alias name */
@@ -1000,6 +1599,10 @@ static ASTNode *parse_typedef(Parser *parser)
 	skip_whitespace(parser);
 	expect(parser, TOK_SEMICOLON);
 
+	/* Register the typedef name in symbol table */
+	if (node->token && node->token->lexeme)
+		symbol_add(parser->symbols, node->token->lexeme, SYM_TYPEDEF);
+
 	return (node);
 }
 
@@ -1013,8 +1616,10 @@ static ASTNode *parse_function(Parser *parser)
 {
 	Token *return_type, *name;
 	ASTNode *func, *body;
+	int start_pos;
 
 	skip_whitespace(parser);
+	start_pos = parser->current;
 
 	/* Parse return type (simplified - just consume type keywords) */
 	return_type = peek(parser);
@@ -1046,6 +1651,7 @@ static ASTNode *parse_function(Parser *parser)
 	}
 	else
 	{
+		parser->current = start_pos;
 		return (NULL);
 	}
 
@@ -1058,24 +1664,31 @@ static ASTNode *parse_function(Parser *parser)
 		skip_whitespace(parser);
 	}
 
-	/* Parse function name */
-	name = expect(parser, TOK_IDENTIFIER);
-	if (!name)
-		return (NULL);
-
-	func = ast_node_create(NODE_FUNCTION, name);
-	if (!func)
-		return (NULL);
-
-	skip_whitespace(parser);
-
-	/* Parse parameter list */
-	if (!expect(parser, TOK_LPAREN))
+	/* Check for function name */
+	if (!match(parser, TOK_IDENTIFIER))
 	{
-		ast_node_destroy(func);
+		parser->current = start_pos;
 		return (NULL);
 	}
 
+	name = advance(parser);
+	skip_whitespace(parser);
+
+	/* Check for opening parenthesis - if not present, it's not a function */
+	if (!match(parser, TOK_LPAREN))
+	{
+		parser->current = start_pos;
+		return (NULL);
+	}
+
+	func = ast_node_create(NODE_FUNCTION, name);
+	if (!func)
+	{
+		parser->current = start_pos;
+		return (NULL);
+	}
+
+	advance(parser); /* consume ( */
 	skip_whitespace(parser);
 
 	/* Skip parameters for now (simplified) */
@@ -1085,11 +1698,13 @@ static ASTNode *parse_function(Parser *parser)
 		skip_whitespace(parser);
 	}
 
-	if (!expect(parser, TOK_RPAREN))
+	if (!match(parser, TOK_RPAREN))
 	{
 		ast_node_destroy(func);
+		parser->current = start_pos;
 		return (NULL);
 	}
+	advance(parser); /* consume ) */
 
 	skip_whitespace(parser);
 
@@ -1168,6 +1783,20 @@ static ASTNode *parse_program(Parser *parser)
 			continue;
 		}
 
+		/* Try to parse union */
+		if (match(parser, TOK_UNION))
+		{
+			func = parse_union_definition(parser);
+			if (func)
+			{
+				ast_node_add_child(program, func);
+				skip_whitespace(parser);
+				if (match(parser, TOK_SEMICOLON))
+					advance(parser);
+			}
+			continue;
+		}
+
 		/* Try to parse a function */
 		func = parse_function(parser);
 		if (func)
@@ -1176,10 +1805,8 @@ static ASTNode *parse_program(Parser *parser)
 		}
 		else
 		{
-			/* If parsing failed and no errors, skip to next top-level declaration */
-			/* This handles typedef, struct, enum, etc. that we don't parse yet */
-			if (parser->error_count > 0)
-				break;
+			/* If parsing failed, skip to next top-level declaration */
+			/* Don't break on errors - try to continue parsing */
 
 			/* Skip to next semicolon or closing brace at top level */
 			while (!is_at_end(parser))
