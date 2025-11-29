@@ -2,9 +2,8 @@
 build/
 *.o
 betty-fmt
-test_lexer
 
-# Editor files
+# Temp files
 *.swp
 *.swo
 *~
@@ -14,18 +13,3 @@ test_lexer
 # OS files
 .DS_Store
 Thumbs.db
-
-# Temporary test files (keep test_parser.c and tests/ directory)
-test_comments.c
-test_factorial.c
-test_if.c
-test_minimal.c
-test_numbers.c
-test_operators.c
-test_preprocessor.c
-test_simple.c
-test_simple_func.c
-test_simple_parse.c
-test_strings.c
-test_typedef_func.c
-test_unsigned.c

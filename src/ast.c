@@ -1,4 +1,4 @@
-#include "ast.h"
+#include "../include/ast.h"
 #include <stdlib.h>
 
 #define INITIAL_CHILD_CAPACITY 8

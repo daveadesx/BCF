@@ -1,6 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
-#include "lexer.h"
-#include "utils.h"
+#include "../include/lexer.h"
+#include "../include/utils.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>

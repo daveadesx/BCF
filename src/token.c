@@ -1,5 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
-#include "token.h"
+#include "../include/token.h"
 #include <stdlib.h>
 #include <string.h>
 
