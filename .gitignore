@@ -13,3 +13,6 @@ betty-fmt
 # OS files
 .DS_Store
 Thumbs.db
+
+# Debug tools
+tools/
