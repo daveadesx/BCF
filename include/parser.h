@@ -3,6 +3,7 @@
 
 #include "token.h"
 #include "ast.h"
+#include "symbol_table.h"
 
 /*
  * Parser structure
@@ -14,6 +15,8 @@ typedef struct {
 	int current;
 
 	int error_count;
+
+	SymbolTable *symbols;  /* Symbol table for typedef tracking */
 } Parser;
 
 /* Parser lifecycle */
