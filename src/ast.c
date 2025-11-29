@@ -56,7 +56,7 @@ void ast_node_destroy(ASTNode *node)
 	free(node->children);
 	free(node->leading_comments);
 	free(node->trailing_comments);
-	free(node->data);
+	/* Note: data field is not freed as it typically points to tokens owned by lexer */
 	free(node);
 }
 
