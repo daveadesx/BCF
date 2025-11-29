@@ -81,7 +81,27 @@ static int process_file(const char *filename)
 		return (-1);
 	}
 
-	/* TODO: Parse and format */
+	/* Parse the file */
+	{
+		ASTNode *ast = parser_parse(parser);
+
+		if (ast)
+		{
+			Formatter *formatter = formatter_create(stdout);
+
+			if (formatter)
+			{
+				formatter_format(formatter, ast);
+				formatter_destroy(formatter);
+			}
+			ast_node_destroy(ast);
+		}
+		else
+		{
+			fprintf(stderr, "Error: Parsing failed\n");
+			result = -1;
+		}
+	}
 
 	parser_destroy(parser);
 	lexer_destroy(lexer);
