@@ -13,6 +13,7 @@ typedef enum {
 	NODE_STRUCT,
 	NODE_TYPEDEF,
 	NODE_ENUM,
+	NODE_ENUM_VALUE,
 	NODE_BLOCK,
 	NODE_IF,
 	NODE_WHILE,
@@ -35,8 +36,41 @@ typedef enum {
 	NODE_ARRAY_ACCESS,
 	NODE_CAST,
 	NODE_SIZEOF,
-	NODE_TERNARY
+	NODE_TERNARY,
+	NODE_PARAM
 } NodeType;
+
+/*
+ * Function signature data
+ */
+typedef struct FunctionData {
+	Token **return_type_tokens;  /* Array of tokens forming return type */
+	int return_type_count;
+	struct ASTNode **params;     /* Array of parameter nodes */
+	int param_count;
+} FunctionData;
+
+/*
+ * Variable declaration data
+ */
+typedef struct VarDeclData {
+	Token **type_tokens;     /* Array of tokens forming type (int, *, const, etc.) */
+	int type_count;
+	Token *name_token;       /* Variable name */
+	Token **array_tokens;    /* Array brackets and size */
+	int array_count;
+	struct VarDeclData **extra_vars;  /* Additional vars in comma list */
+	int extra_count;
+	struct ASTNode *init_expr;  /* Initialization expression */
+} VarDeclData;
+
+/*
+ * Typedef data (for simple typedefs like "typedef int myint;")
+ */
+typedef struct TypedefData {
+	Token **base_type_tokens;  /* Array of tokens forming base type */
+	int base_type_count;
+} TypedefData;
 
 /*
  * AST node structure
