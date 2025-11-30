@@ -276,7 +276,7 @@ static int is_type_keyword(TokenType type)
 		type == TOK_LONG || type == TOK_SHORT || type == TOK_FLOAT_KW ||
 		type == TOK_DOUBLE || type == TOK_UNSIGNED || type == TOK_SIGNED ||
 		type == TOK_CONST || type == TOK_STATIC || type == TOK_STRUCT ||
-		type == TOK_TYPEDEF);
+		type == TOK_TYPEDEF || type == TOK_EXTERN);
 }
 
 /*
@@ -814,6 +814,19 @@ static ASTNode *parse_var_declaration(Parser *parser)
 				type_tokens[type_count++] = advance(parser);
 				skip_whitespace(parser);
 			}
+		}
+
+		/* After modifiers like static/const, check for typedef'd type */
+		if (peek(parser) && peek(parser)->type == TOK_IDENTIFIER &&
+		    symbol_is_typedef(parser->symbols, peek(parser)->lexeme))
+		{
+			if (type_count >= type_capacity)
+			{
+				type_capacity *= 2;
+				type_tokens = realloc(type_tokens, sizeof(Token *) * type_capacity);
+			}
+			type_tokens[type_count++] = advance(parser);
+			skip_whitespace(parser);
 		}
 	}
 	/* Check if it's a typedef'd type */
@@ -2251,7 +2264,7 @@ static ASTNode *parse_program(Parser *parser)
 			continue;
 		}
 
-		/* Try to parse a function */
+		/* Try to parse a function first */
 		func = parse_function(parser);
 		if (func)
 		{
@@ -2259,6 +2272,21 @@ static ASTNode *parse_program(Parser *parser)
 		}
 		else
 		{
+			/* Not a function - try parsing as global variable declaration */
+			Token *tok = peek(parser);
+
+			if (tok && (is_type_keyword(tok->type) ||
+			    (tok->type == TOK_IDENTIFIER &&
+			     symbol_is_typedef(parser->symbols, tok->lexeme))))
+			{
+				func = parse_var_declaration(parser);
+				if (func)
+				{
+					ast_node_add_child(program, func);
+					continue;
+				}
+			}
+
 			/* If parsing failed, skip to next top-level declaration */
 			/* Don't break on errors - try to continue parsing */
 
