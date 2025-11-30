@@ -753,7 +753,13 @@ static ASTNode *parse_var_declaration(Parser *parser)
 {
 	Token *type_token, *name_token;
 	ASTNode *node;
-	int is_typedef_type = 0;
+	VarDeclData *var_data;
+	Token **type_tokens = NULL;
+	int type_count = 0;
+	int type_capacity = 8;
+	Token **array_tokens = NULL;
+	int array_count = 0;
+	int array_capacity = 4;
 
 	skip_whitespace(parser);
 	type_token = peek(parser);
@@ -761,74 +767,151 @@ static ASTNode *parse_var_declaration(Parser *parser)
 	if (!type_token)
 		return (NULL);
 
+	type_tokens = malloc(sizeof(Token *) * type_capacity);
+	if (!type_tokens)
+		return (NULL);
+
 	/* Check if it's a built-in type keyword */
 	if (is_type_keyword(type_token->type))
 	{
-		advance(parser); /* consume first type keyword */
+		type_tokens[type_count++] = advance(parser);
 		skip_whitespace(parser);
+
+		/* Handle struct/enum name (e.g., "struct node" or "enum color") */
+		if ((type_token->type == TOK_STRUCT || type_token->type == TOK_ENUM) &&
+		    match(parser, TOK_IDENTIFIER))
+		{
+			if (type_count >= type_capacity)
+			{
+				type_capacity *= 2;
+				type_tokens = realloc(type_tokens, sizeof(Token *) * type_capacity);
+			}
+			type_tokens[type_count++] = advance(parser);
+			skip_whitespace(parser);
+		}
 
 		/* Handle compound types: unsigned int, long long, const static int, etc. */
 		while (peek(parser) && is_type_keyword(peek(parser)->type))
 		{
-			advance(parser);
+			if (type_count >= type_capacity)
+			{
+				type_capacity *= 2;
+				type_tokens = realloc(type_tokens, sizeof(Token *) * type_capacity);
+			}
+			type_tokens[type_count++] = advance(parser);
 			skip_whitespace(parser);
+
+			/* Handle struct/enum name after type keyword */
+			if ((type_tokens[type_count - 1]->type == TOK_STRUCT ||
+			     type_tokens[type_count - 1]->type == TOK_ENUM) &&
+			    match(parser, TOK_IDENTIFIER))
+			{
+				if (type_count >= type_capacity)
+				{
+					type_capacity *= 2;
+					type_tokens = realloc(type_tokens, sizeof(Token *) * type_capacity);
+				}
+				type_tokens[type_count++] = advance(parser);
+				skip_whitespace(parser);
+			}
 		}
 	}
 	/* Check if it's a typedef'd type */
 	else if (type_token->type == TOK_IDENTIFIER &&
 		 symbol_is_typedef(parser->symbols, type_token->lexeme))
 	{
-		is_typedef_type = 1;
-		advance(parser); /* consume typedef name */
+		type_tokens[type_count++] = advance(parser);
 		skip_whitespace(parser);
 	}
 	/* Heuristic: unknown identifier that looks like a type (from headers) */
 	else if (type_token->type == TOK_IDENTIFIER &&
 		 looks_like_ptr_declaration(parser))
 	{
-		is_typedef_type = 1;
-		advance(parser); /* consume unknown type name */
+		type_tokens[type_count++] = advance(parser);
 		skip_whitespace(parser);
 	}
 	else
 	{
+		free(type_tokens);
 		return (NULL);
 	}
 
 	/* Handle pointer declarations: int *ptr or node_t *node */
 	while (match(parser, TOK_STAR))
 	{
-		advance(parser);
+		if (type_count >= type_capacity)
+		{
+			type_capacity *= 2;
+			type_tokens = realloc(type_tokens, sizeof(Token *) * type_capacity);
+		}
+		type_tokens[type_count++] = advance(parser);
 		skip_whitespace(parser);
 	}
 
 	name_token = expect(parser, TOK_IDENTIFIER);
 	if (!name_token)
+	{
+		free(type_tokens);
 		return (NULL);
+	}
 
 	node = ast_node_create(NODE_VAR_DECL, type_token);
-	node->data = name_token;  /* Store variable name in data field */
-	skip_whitespace(parser);
-
-	/* Suppress unused variable warning */
-	(void)is_typedef_type;
 	skip_whitespace(parser);
 
 	/* Handle array declarations: int arr[] or int arr[10] */
-	if (match(parser, TOK_LBRACKET))
+	array_tokens = malloc(sizeof(Token *) * array_capacity);
+	while (match(parser, TOK_LBRACKET))
 	{
-		advance(parser); /* consume [ */
+		if (array_count >= array_capacity)
+		{
+			array_capacity *= 2;
+			array_tokens = realloc(array_tokens, sizeof(Token *) * array_capacity);
+		}
+		array_tokens[array_count++] = advance(parser); /* [ */
 		skip_whitespace(parser);
 
 		/* Consume array size if present */
-		if (!match(parser, TOK_RBRACKET))
+		while (!is_at_end(parser) && !match(parser, TOK_RBRACKET))
 		{
-			parse_expression(parser); /* consume size expression */
+			if (array_count >= array_capacity)
+			{
+				array_capacity *= 2;
+				array_tokens = realloc(array_tokens, sizeof(Token *) * array_capacity);
+			}
+			array_tokens[array_count++] = advance(parser);
 			skip_whitespace(parser);
 		}
 
-		expect(parser, TOK_RBRACKET);
+		if (match(parser, TOK_RBRACKET))
+		{
+			if (array_count >= array_capacity)
+			{
+				array_capacity *= 2;
+				array_tokens = realloc(array_tokens, sizeof(Token *) * array_capacity);
+			}
+			array_tokens[array_count++] = advance(parser); /* ] */
+		}
 		skip_whitespace(parser);
+	}
+
+	/* Create VarDeclData */
+	var_data = malloc(sizeof(VarDeclData));
+	if (var_data)
+	{
+		var_data->type_tokens = type_tokens;
+		var_data->type_count = type_count;
+		var_data->name_token = name_token;
+		var_data->array_tokens = array_tokens;
+		var_data->array_count = array_count;
+		var_data->extra_vars = NULL;
+		var_data->extra_count = 0;
+		var_data->init_expr = NULL;
+		node->data = var_data;
+	}
+	else
+	{
+		free(type_tokens);
+		free(array_tokens);
 	}
 
 	/* Check for initialization */
@@ -838,51 +921,128 @@ static ASTNode *parse_var_declaration(Parser *parser)
 		ASTNode *init = parse_expression(parser);
 
 		if (init)
+		{
 			ast_node_add_child(node, init);
+			if (var_data)
+				var_data->init_expr = init;
+		}
 	}
 
 	skip_whitespace(parser);
 
 	/* Handle comma-separated declarations: int i, j, k; */
-	while (match(parser, TOK_COMMA))
+	if (match(parser, TOK_COMMA) && var_data)
 	{
-		advance(parser); /* consume comma */
-		skip_whitespace(parser);
+		int extra_capacity = 4;
+		VarDeclData **extras = malloc(sizeof(VarDeclData *) * extra_capacity);
+		int extra_count = 0;
 
-		/* Handle pointer in comma list: int *p, *q */
-		while (match(parser, TOK_STAR))
+		while (match(parser, TOK_COMMA))
 		{
-			advance(parser);
+			VarDeclData *extra;
+			Token **extra_type_tokens;
+			int extra_type_count = 0;
+			Token **extra_arr_tokens = NULL;
+			int extra_arr_count = 0;
+			int i;
+
+			advance(parser); /* consume comma */
 			skip_whitespace(parser);
-		}
 
-		name_token = expect(parser, TOK_IDENTIFIER);
-		if (!name_token)
-			break;
-
-		skip_whitespace(parser);
-
-		/* Handle array in comma list */
-		if (match(parser, TOK_LBRACKET))
-		{
-			advance(parser);
-			skip_whitespace(parser);
-			if (!match(parser, TOK_RBRACKET))
+			/* Copy base type tokens, then add any pointers */
+			extra_type_tokens = malloc(sizeof(Token *) * (type_count + 4));
+			for (i = 0; i < type_count; i++)
 			{
-				parse_expression(parser);
+				/* Copy type but stop at pointers */
+				if (type_tokens[i]->type == TOK_STAR)
+					break;
+				extra_type_tokens[extra_type_count++] = type_tokens[i];
+			}
+
+			/* Handle pointer in comma list: int *p, *q */
+			while (match(parser, TOK_STAR))
+			{
+				extra_type_tokens[extra_type_count++] = advance(parser);
 				skip_whitespace(parser);
 			}
-			expect(parser, TOK_RBRACKET);
+
+			name_token = expect(parser, TOK_IDENTIFIER);
+			if (!name_token)
+			{
+				free(extra_type_tokens);
+				break;
+			}
+
+			skip_whitespace(parser);
+
+			/* Handle array in comma list */
+			if (match(parser, TOK_LBRACKET))
+			{
+				int arr_cap = 4;
+
+				extra_arr_tokens = malloc(sizeof(Token *) * arr_cap);
+				while (match(parser, TOK_LBRACKET))
+				{
+					extra_arr_tokens[extra_arr_count++] = advance(parser);
+					skip_whitespace(parser);
+
+					while (!is_at_end(parser) && !match(parser, TOK_RBRACKET))
+					{
+						if (extra_arr_count >= arr_cap)
+						{
+							arr_cap *= 2;
+							extra_arr_tokens = realloc(extra_arr_tokens,
+								sizeof(Token *) * arr_cap);
+						}
+						extra_arr_tokens[extra_arr_count++] = advance(parser);
+						skip_whitespace(parser);
+					}
+
+					if (match(parser, TOK_RBRACKET))
+						extra_arr_tokens[extra_arr_count++] = advance(parser);
+					skip_whitespace(parser);
+				}
+			}
+
+			/* Create extra VarDeclData */
+			extra = malloc(sizeof(VarDeclData));
+			if (extra)
+			{
+				extra->type_tokens = extra_type_tokens;
+				extra->type_count = extra_type_count;
+				extra->name_token = name_token;
+				extra->array_tokens = extra_arr_tokens;
+				extra->array_count = extra_arr_count;
+				extra->extra_vars = NULL;
+				extra->extra_count = 0;
+				extra->init_expr = NULL;
+
+				/* Check for initialization of this variable */
+				if (match(parser, TOK_ASSIGN))
+				{
+					advance(parser);
+					extra->init_expr = parse_expression(parser);
+					skip_whitespace(parser);
+				}
+
+				if (extra_count >= extra_capacity)
+				{
+					extra_capacity *= 2;
+					extras = realloc(extras, sizeof(VarDeclData *) * extra_capacity);
+				}
+				extras[extra_count++] = extra;
+			}
+			else
+			{
+				free(extra_type_tokens);
+				free(extra_arr_tokens);
+			}
+
 			skip_whitespace(parser);
 		}
 
-		/* Check for initialization of this variable */
-		if (match(parser, TOK_ASSIGN))
-		{
-			advance(parser);
-			parse_expression(parser); /* consume but don't store for now */
-			skip_whitespace(parser);
-		}
+		var_data->extra_vars = extras;
+		var_data->extra_count = extra_count;
 	}
 
 	expect(parser, TOK_SEMICOLON);
@@ -1377,6 +1537,7 @@ static ASTNode *parse_struct_definition(Parser *parser)
 {
 	Token *name_token = NULL;
 	ASTNode *node;
+	ASTNode *member;
 
 	advance(parser); /* consume 'struct' */
 	skip_whitespace(parser);
@@ -1397,23 +1558,17 @@ static ASTNode *parse_struct_definition(Parser *parser)
 		advance(parser); /* consume { */
 		skip_whitespace(parser);
 
-		/* Parse struct members */
+		/* Parse struct members as variable declarations */
 		while (!is_at_end(parser) && !match(parser, TOK_RBRACE))
 		{
 			skip_whitespace(parser);
 			if (match(parser, TOK_RBRACE))
 				break;
 
-			/* Parse member declaration (simplified - just consume until semicolon) */
-			while (!is_at_end(parser) && !match(parser, TOK_SEMICOLON))
-			{
-				advance(parser);
-				skip_whitespace(parser);
-			}
-
-			if (match(parser, TOK_SEMICOLON))
-				advance(parser);
-			skip_whitespace(parser);
+			/* Parse member as variable declaration */
+			member = parse_var_declaration(parser);
+			if (member)
+				ast_node_add_child(node, member);
 		}
 
 		expect(parser, TOK_RBRACE);
@@ -1429,6 +1584,7 @@ static ASTNode *parse_enum_definition(Parser *parser)
 {
 	Token *name_token = NULL;
 	ASTNode *node;
+	ASTNode *enum_val;
 
 	advance(parser); /* consume 'enum' */
 	skip_whitespace(parser);
@@ -1449,11 +1605,47 @@ static ASTNode *parse_enum_definition(Parser *parser)
 		advance(parser); /* consume { */
 		skip_whitespace(parser);
 
-		/* Parse enum values (simplified - just consume until closing brace) */
+		/* Parse enum values */
 		while (!is_at_end(parser) && !match(parser, TOK_RBRACE))
 		{
-			advance(parser);
 			skip_whitespace(parser);
+			if (match(parser, TOK_RBRACE))
+				break;
+
+			/* Each enum value is an identifier */
+			if (match(parser, TOK_IDENTIFIER))
+			{
+				enum_val = ast_node_create(NODE_ENUM_VALUE, peek(parser));
+				advance(parser);
+				skip_whitespace(parser);
+
+				/* Check for = value */
+				if (match(parser, TOK_ASSIGN))
+				{
+					advance(parser);
+					skip_whitespace(parser);
+					/* Consume the value expression */
+					while (!is_at_end(parser) && !match(parser, TOK_COMMA) && !match(parser, TOK_RBRACE))
+					{
+						/* Store value as child if it's a literal */
+						if (enum_val->child_count == 0 && (match(parser, TOK_INTEGER) || match(parser, TOK_IDENTIFIER)))
+						{
+							ast_node_add_child(enum_val, ast_node_create(NODE_LITERAL, peek(parser)));
+						}
+						advance(parser);
+						skip_whitespace(parser);
+					}
+				}
+
+				ast_node_add_child(node, enum_val);
+			}
+
+			/* Skip comma if present */
+			if (match(parser, TOK_COMMA))
+			{
+				advance(parser);
+				skip_whitespace(parser);
+			}
 		}
 
 		expect(parser, TOK_RBRACE);
@@ -1569,7 +1761,12 @@ static ASTNode *parse_typedef(Parser *parser)
 	}
 	else
 	{
-		/* Regular typedef - consume until we find the alias name */
+		/* Regular typedef - store base type tokens */
+		Token **base_tokens = malloc(sizeof(Token *) * 16);
+		int base_count = 0;
+		int base_capacity = 16;
+		TypedefData *td_data;
+
 		while (!is_at_end(parser) && !match(parser, TOK_SEMICOLON))
 		{
 			/* The last identifier before semicolon is the typedef name */
@@ -1587,13 +1784,33 @@ static ASTNode *parse_typedef(Parser *parser)
 					node->token = alias_token;
 					break;
 				}
+				/* Otherwise it's part of the type */
+				if (base_count >= base_capacity)
+				{
+					base_capacity *= 2;
+					base_tokens = realloc(base_tokens, sizeof(Token *) * base_capacity);
+				}
+				base_tokens[base_count++] = alias_token;
 			}
 			else
 			{
+				/* Store other tokens as part of base type */
+				if (base_count >= base_capacity)
+				{
+					base_capacity *= 2;
+					base_tokens = realloc(base_tokens, sizeof(Token *) * base_capacity);
+				}
+				base_tokens[base_count++] = peek(parser);
 				advance(parser);
 				skip_whitespace(parser);
 			}
 		}
+
+		/* Store typedef data */
+		td_data = malloc(sizeof(TypedefData));
+		td_data->base_type_tokens = base_tokens;
+		td_data->base_type_count = base_count;
+		node->data = td_data;
 	}
 
 	skip_whitespace(parser);
@@ -1607,6 +1824,125 @@ static ASTNode *parse_typedef(Parser *parser)
 }
 
 /*
+ * parse_parameter - Parse a single function parameter
+ * @parser: Parser instance
+ *
+ * Return: Parameter AST node, or NULL
+ */
+static ASTNode *parse_parameter(Parser *parser)
+{
+	ASTNode *param;
+	Token *type_start;
+	Token **type_tokens = NULL;
+	int type_count = 0;
+	int type_capacity = 4;
+	Token *name = NULL;
+
+	type_tokens = malloc(sizeof(Token *) * type_capacity);
+	if (!type_tokens)
+		return (NULL);
+
+	skip_whitespace(parser);
+	type_start = peek(parser);
+	if (!type_start)
+	{
+		free(type_tokens);
+		return (NULL);
+	}
+
+	/* Collect type tokens (const, unsigned, int, *, etc.) */
+	while (!is_at_end(parser) && !match(parser, TOK_COMMA) &&
+	       !match(parser, TOK_RPAREN))
+	{
+		Token *tok = peek(parser);
+
+		if (!tok)
+			break;
+
+		/* Check if this looks like a parameter name (identifier not followed by *) */
+		if (tok->type == TOK_IDENTIFIER)
+		{
+			Token *next = peek_ahead(parser, 1);
+
+			if (!next || next->type == TOK_COMMA ||
+			    next->type == TOK_RPAREN ||
+			    next->type == TOK_LBRACKET)
+			{
+				/* This is the parameter name */
+				name = advance(parser);
+				skip_whitespace(parser);
+				/* Handle array parameters like argv[] */
+				while (match(parser, TOK_LBRACKET))
+				{
+					if (type_count >= type_capacity)
+					{
+						type_capacity *= 2;
+						type_tokens = realloc(type_tokens,
+							sizeof(Token *) * type_capacity);
+					}
+					type_tokens[type_count++] = advance(parser);
+					skip_whitespace(parser);
+					if (match(parser, TOK_RBRACKET))
+					{
+						if (type_count >= type_capacity)
+						{
+							type_capacity *= 2;
+							type_tokens = realloc(type_tokens,
+								sizeof(Token *) * type_capacity);
+						}
+						type_tokens[type_count++] = advance(parser);
+					}
+					skip_whitespace(parser);
+				}
+				break;
+			}
+		}
+
+		/* Add to type tokens */
+		if (type_count >= type_capacity)
+		{
+			type_capacity *= 2;
+			type_tokens = realloc(type_tokens, sizeof(Token *) * type_capacity);
+		}
+		type_tokens[type_count++] = advance(parser);
+		skip_whitespace(parser);
+	}
+
+	if (type_count == 0 && !name)
+	{
+		free(type_tokens);
+		return (NULL);
+	}
+
+	param = ast_node_create(NODE_PARAM, name);
+	if (!param)
+	{
+		free(type_tokens);
+		return (NULL);
+	}
+
+	/* Store type tokens in data field */
+	{
+		FunctionData *pdata = malloc(sizeof(FunctionData));
+
+		if (pdata)
+		{
+			pdata->return_type_tokens = type_tokens;
+			pdata->return_type_count = type_count;
+			pdata->params = NULL;
+			pdata->param_count = 0;
+			param->data = pdata;
+		}
+		else
+		{
+			free(type_tokens);
+		}
+	}
+
+	return (param);
+}
+
+/*
  * parse_function - Parse a function declaration
  * @parser: Parser instance
  *
@@ -1614,59 +1950,120 @@ static ASTNode *parse_typedef(Parser *parser)
  */
 static ASTNode *parse_function(Parser *parser)
 {
-	Token *return_type, *name;
+	Token *name;
 	ASTNode *func, *body;
 	int start_pos;
+	Token **return_type_tokens = NULL;
+	int return_type_count = 0;
+	int return_type_capacity = 4;
+	FunctionData *func_data;
+	ASTNode **params = NULL;
+	int param_count = 0;
+	int param_capacity = 4;
 
 	skip_whitespace(parser);
 	start_pos = parser->current;
 
-	/* Parse return type (simplified - just consume type keywords) */
-	return_type = peek(parser);
-	if (!return_type)
+	return_type_tokens = malloc(sizeof(Token *) * return_type_capacity);
+	if (!return_type_tokens)
 		return (NULL);
 
+	/* Collect return type tokens */
 	/* Handle type modifiers: unsigned, signed, static, const, etc. */
-	while (return_type && (return_type->type == TOK_UNSIGNED ||
-	       return_type->type == TOK_SIGNED ||
-	       return_type->type == TOK_STATIC ||
-	       return_type->type == TOK_CONST))
+	while (peek(parser) && (peek(parser)->type == TOK_UNSIGNED ||
+	       peek(parser)->type == TOK_SIGNED ||
+	       peek(parser)->type == TOK_STATIC ||
+	       peek(parser)->type == TOK_CONST))
 	{
-		advance(parser);
+		if (return_type_count >= return_type_capacity)
+		{
+			return_type_capacity *= 2;
+			return_type_tokens = realloc(return_type_tokens,
+				sizeof(Token *) * return_type_capacity);
+		}
+		return_type_tokens[return_type_count++] = advance(parser);
 		skip_whitespace(parser);
-		return_type = peek(parser);
 	}
 
 	/* Accept base type keywords OR identifiers (for typedef'd types like node_t) */
-	if (return_type && (return_type->type == TOK_INT ||
-	    return_type->type == TOK_VOID ||
-	    return_type->type == TOK_CHAR_KW ||
-	    return_type->type == TOK_LONG ||
-	    return_type->type == TOK_SHORT ||
-	    return_type->type == TOK_FLOAT_KW ||
-	    return_type->type == TOK_DOUBLE ||
-	    return_type->type == TOK_IDENTIFIER))
+	if (peek(parser) && (peek(parser)->type == TOK_INT ||
+	    peek(parser)->type == TOK_VOID ||
+	    peek(parser)->type == TOK_CHAR_KW ||
+	    peek(parser)->type == TOK_LONG ||
+	    peek(parser)->type == TOK_SHORT ||
+	    peek(parser)->type == TOK_FLOAT_KW ||
+	    peek(parser)->type == TOK_DOUBLE ||
+	    peek(parser)->type == TOK_STRUCT ||
+	    peek(parser)->type == TOK_ENUM ||
+	    peek(parser)->type == TOK_IDENTIFIER))
 	{
-		advance(parser);
+		if (return_type_count >= return_type_capacity)
+		{
+			return_type_capacity *= 2;
+			return_type_tokens = realloc(return_type_tokens,
+				sizeof(Token *) * return_type_capacity);
+		}
+		return_type_tokens[return_type_count++] = advance(parser);
 	}
 	else
 	{
+		free(return_type_tokens);
 		parser->current = start_pos;
 		return (NULL);
 	}
 
 	skip_whitespace(parser);
 
-	/* Handle pointer types: int *func() or node_t *func() */
+	/* Handle multi-word types like "long long", "long int", etc. */
+	while (peek(parser) && (peek(parser)->type == TOK_LONG ||
+	       peek(parser)->type == TOK_INT ||
+	       peek(parser)->type == TOK_DOUBLE))
+	{
+		if (return_type_count >= return_type_capacity)
+		{
+			return_type_capacity *= 2;
+			return_type_tokens = realloc(return_type_tokens,
+				sizeof(Token *) * return_type_capacity);
+		}
+		return_type_tokens[return_type_count++] = advance(parser);
+		skip_whitespace(parser);
+	}
+
+	/* Handle struct/enum type names */
+	if (return_type_count > 0 &&
+	    (return_type_tokens[return_type_count - 1]->type == TOK_STRUCT ||
+	     return_type_tokens[return_type_count - 1]->type == TOK_ENUM))
+	{
+		if (match(parser, TOK_IDENTIFIER))
+		{
+			if (return_type_count >= return_type_capacity)
+			{
+				return_type_capacity *= 2;
+				return_type_tokens = realloc(return_type_tokens,
+					sizeof(Token *) * return_type_capacity);
+			}
+			return_type_tokens[return_type_count++] = advance(parser);
+			skip_whitespace(parser);
+		}
+	}
+
+	/* Handle pointer types */
 	while (match(parser, TOK_STAR))
 	{
-		advance(parser);
+		if (return_type_count >= return_type_capacity)
+		{
+			return_type_capacity *= 2;
+			return_type_tokens = realloc(return_type_tokens,
+				sizeof(Token *) * return_type_capacity);
+		}
+		return_type_tokens[return_type_count++] = advance(parser);
 		skip_whitespace(parser);
 	}
 
 	/* Check for function name */
 	if (!match(parser, TOK_IDENTIFIER))
 	{
+		free(return_type_tokens);
 		parser->current = start_pos;
 		return (NULL);
 	}
@@ -1677,6 +2074,7 @@ static ASTNode *parse_function(Parser *parser)
 	/* Check for opening parenthesis - if not present, it's not a function */
 	if (!match(parser, TOK_LPAREN))
 	{
+		free(return_type_tokens);
 		parser->current = start_pos;
 		return (NULL);
 	}
@@ -1684,6 +2082,7 @@ static ASTNode *parse_function(Parser *parser)
 	func = ast_node_create(NODE_FUNCTION, name);
 	if (!func)
 	{
+		free(return_type_tokens);
 		parser->current = start_pos;
 		return (NULL);
 	}
@@ -1691,15 +2090,42 @@ static ASTNode *parse_function(Parser *parser)
 	advance(parser); /* consume ( */
 	skip_whitespace(parser);
 
-	/* Skip parameters for now (simplified) */
+	/* Parse parameters */
+	params = malloc(sizeof(ASTNode *) * param_capacity);
+	if (!params)
+	{
+		free(return_type_tokens);
+		ast_node_destroy(func);
+		parser->current = start_pos;
+		return (NULL);
+	}
+
 	while (!is_at_end(parser) && !match(parser, TOK_RPAREN))
 	{
-		advance(parser);
+		ASTNode *param = parse_parameter(parser);
+
+		if (param)
+		{
+			if (param_count >= param_capacity)
+			{
+				param_capacity *= 2;
+				params = realloc(params, sizeof(ASTNode *) * param_capacity);
+			}
+			params[param_count++] = param;
+		}
+
 		skip_whitespace(parser);
+		if (match(parser, TOK_COMMA))
+		{
+			advance(parser);
+			skip_whitespace(parser);
+		}
 	}
 
 	if (!match(parser, TOK_RPAREN))
 	{
+		free(return_type_tokens);
+		free(params);
 		ast_node_destroy(func);
 		parser->current = start_pos;
 		return (NULL);
@@ -1707,6 +2133,22 @@ static ASTNode *parse_function(Parser *parser)
 	advance(parser); /* consume ) */
 
 	skip_whitespace(parser);
+
+	/* Store function signature data */
+	func_data = malloc(sizeof(FunctionData));
+	if (func_data)
+	{
+		func_data->return_type_tokens = return_type_tokens;
+		func_data->return_type_count = return_type_count;
+		func_data->params = params;
+		func_data->param_count = param_count;
+		func->data = func_data;
+	}
+	else
+	{
+		free(return_type_tokens);
+		free(params);
+	}
 
 	/* Parse function body */
 	body = parse_block(parser);
@@ -1755,18 +2197,30 @@ static ASTNode *parse_program(Parser *parser)
 			continue;
 		}
 
-		/* Try to parse struct */
+		/* Try to parse struct - but check if it's a definition or function return type */
 		if (match(parser, TOK_STRUCT))
 		{
-			func = parse_struct_definition(parser);
-			if (func)
+			/* Look ahead to determine if this is a struct definition or function */
+			Token *next1 = peek_ahead(parser, 1); /* struct name or { */
+			Token *next2 = peek_ahead(parser, 2); /* { or * or identifier */
+
+			/* struct { ... } is anonymous struct def */
+			/* struct name { ... } is named struct def */
+			/* struct name *func() or struct name func() is function */
+			if ((next1 && next1->type == TOK_LBRACE) ||
+			    (next2 && next2->type == TOK_LBRACE))
 			{
-				ast_node_add_child(program, func);
-				skip_whitespace(parser);
-				if (match(parser, TOK_SEMICOLON))
-					advance(parser);
+				func = parse_struct_definition(parser);
+				if (func)
+				{
+					ast_node_add_child(program, func);
+					skip_whitespace(parser);
+					if (match(parser, TOK_SEMICOLON))
+						advance(parser);
+				}
+				continue;
 			}
-			continue;
+			/* Otherwise fall through to function parsing */
 		}
 
 		/* Try to parse enum */
