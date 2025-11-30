@@ -256,6 +256,13 @@ static void format_program(Formatter *fmt, ASTNode *node)
 
 		format_node(fmt, child);
 
+		/* Add semicolon and newline for standalone struct/enum declarations */
+		if (child->type == NODE_STRUCT || child->type == NODE_ENUM)
+		{
+			emit(fmt, ";");
+			emit_newline(fmt);
+		}
+
 		prev_was_function = (child->type == NODE_FUNCTION);
 	}
 }
@@ -266,16 +273,125 @@ static void format_program(Formatter *fmt, ASTNode *node)
 
 static void format_function(Formatter *fmt, ASTNode *node)
 {
-	Token *token = node->token;
+	Token *name_token = node->token;
+	FunctionData *func_data = (FunctionData *)node->data;
+	int i;
 
-	if (!token)
+	if (!name_token)
 		return;
 
-	emit(fmt, "/* function: ");
-	emit(fmt, token->lexeme);
-	emit(fmt, " */");
+	/* Output return type */
+	if (func_data && func_data->return_type_count > 0)
+	{
+		int last_was_star = 0;
+
+		for (i = 0; i < func_data->return_type_count; i++)
+		{
+			Token *tok = func_data->return_type_tokens[i];
+
+			if (tok->type == TOK_STAR)
+			{
+				/* Pointer - no space before, but check if previous was * */
+				if (i > 0 && !last_was_star)
+					emit(fmt, " ");
+				emit(fmt, "*");
+				last_was_star = 1;
+			}
+			else
+			{
+				if (i > 0)
+					emit(fmt, " ");
+				emit(fmt, tok->lexeme);
+				last_was_star = 0;
+			}
+		}
+		/* Only add space if last token wasn't a pointer */
+		if (!last_was_star)
+			emit(fmt, " ");
+	}
+
+	/* Function name (same line as return type) */
+	emit(fmt, name_token->lexeme);
+	emit(fmt, "(");
+
+	/* Output parameters */
+	if (func_data && func_data->param_count > 0)
+	{
+		for (i = 0; i < func_data->param_count; i++)
+		{
+			ASTNode *param = func_data->params[i];
+			FunctionData *pdata = (FunctionData *)param->data;
+			int j;
+			int bracket_start = -1;
+			int last_was_star = 0;
+
+			if (i > 0)
+				emit(fmt, ", ");
+
+			/* Output parameter type (but not brackets) */
+			if (pdata && pdata->return_type_count > 0)
+			{
+				for (j = 0; j < pdata->return_type_count; j++)
+				{
+					Token *tok = pdata->return_type_tokens[j];
+
+					if (tok->type == TOK_STAR)
+					{
+						if (j > 0 && !last_was_star)
+							emit(fmt, " ");
+						emit(fmt, "*");
+						last_was_star = 1;
+					}
+					else if (tok->type == TOK_LBRACKET)
+					{
+						bracket_start = j;
+						break;  /* Stop here, output brackets after name */
+					}
+					else
+					{
+						/* Add space before keyword only if not after * */
+						if (j > 0 && !last_was_star)
+							emit(fmt, " ");
+						emit(fmt, tok->lexeme);
+						last_was_star = 0;
+					}
+				}
+			}
+
+			/* Output parameter name */
+			if (param->token)
+			{
+				/* No space after pointer, but space after type keyword */
+				if (pdata && pdata->return_type_count > 0 &&
+				    bracket_start != 0 && !last_was_star)
+					emit(fmt, " ");
+				emit(fmt, param->token->lexeme);
+			}
+
+			/* Output array brackets after name */
+			if (bracket_start >= 0 && pdata)
+			{
+				for (j = bracket_start; j < pdata->return_type_count; j++)
+				{
+					Token *tok = pdata->return_type_tokens[j];
+
+					if (tok->type == TOK_LBRACKET)
+						emit(fmt, "[");
+					else if (tok->type == TOK_RBRACKET)
+						emit(fmt, "]");
+				}
+			}
+		}
+	}
+	else
+	{
+		emit(fmt, "void");
+	}
+
+	emit(fmt, ")");
 	emit_newline(fmt);
 
+	/* Function body */
 	if (node->child_count > 0)
 	{
 		emit(fmt, "{");
@@ -330,27 +446,157 @@ static void format_block(Formatter *fmt, ASTNode *node)
  * Variable declaration formatting
  */
 
+/*
+ * Helper to output a single variable declaration
+ */
+static void format_single_var(Formatter *fmt, VarDeclData *var_data)
+{
+	int i;
+	int last_was_star = 0;
+
+	if (!var_data || var_data->type_count == 0)
+		return;
+
+	/* Output type tokens */
+	for (i = 0; i < var_data->type_count; i++)
+	{
+		Token *tok = var_data->type_tokens[i];
+
+		if (tok->type == TOK_STAR)
+		{
+			if (i > 0 && !last_was_star)
+				emit(fmt, " ");
+			emit(fmt, "*");
+			last_was_star = 1;
+		}
+		else
+		{
+			if (i > 0 && !last_was_star)
+				emit(fmt, " ");
+			emit(fmt, tok->lexeme);
+			last_was_star = 0;
+		}
+	}
+
+	/* Output variable name */
+	if (var_data->name_token)
+	{
+		if (!last_was_star)
+			emit(fmt, " ");
+		emit(fmt, var_data->name_token->lexeme);
+	}
+
+	/* Output array brackets */
+	if (var_data->array_count > 0)
+	{
+		for (i = 0; i < var_data->array_count; i++)
+		{
+			Token *tok = var_data->array_tokens[i];
+
+			if (tok->type == TOK_LBRACKET)
+				emit(fmt, "[");
+			else if (tok->type == TOK_RBRACKET)
+				emit(fmt, "]");
+			else
+				emit(fmt, tok->lexeme);
+		}
+	}
+
+	/* Output initialization if present */
+	if (var_data->init_expr)
+	{
+		emit(fmt, " = ");
+		format_expression(fmt, var_data->init_expr);
+	}
+}
+
+/*
+ * Helper to output just name, array, and init (no type) for comma-separated vars
+ */
+static void format_extra_var(Formatter *fmt, VarDeclData *var_data)
+{
+	int i;
+	int has_ptr = 0;
+
+	if (!var_data)
+		return;
+
+	/* Check if this var has pointers */
+	for (i = 0; i < var_data->type_count; i++)
+	{
+		if (var_data->type_tokens[i]->type == TOK_STAR)
+		{
+			emit(fmt, "*");
+			has_ptr = 1;
+		}
+	}
+
+	/* Output variable name */
+	if (var_data->name_token)
+		emit(fmt, var_data->name_token->lexeme);
+
+	/* Output array brackets */
+	if (var_data->array_count > 0)
+	{
+		for (i = 0; i < var_data->array_count; i++)
+		{
+			Token *tok = var_data->array_tokens[i];
+
+			if (tok->type == TOK_LBRACKET)
+				emit(fmt, "[");
+			else if (tok->type == TOK_RBRACKET)
+				emit(fmt, "]");
+			else
+				emit(fmt, tok->lexeme);
+		}
+	}
+
+	/* Output initialization if present */
+	if (var_data->init_expr)
+	{
+		emit(fmt, " = ");
+		format_expression(fmt, var_data->init_expr);
+	}
+
+	(void)has_ptr;
+}
+
 static void format_var_decl(Formatter *fmt, ASTNode *node)
 {
-	Token *type_token = node->token;
-	Token *name_token = (Token *)node->data;
+	VarDeclData *var_data = (VarDeclData *)node->data;
+	int i;
 
 	emit_indent(fmt);
 
-	if (type_token && type_token->lexeme)
-		emit(fmt, type_token->lexeme);
+	if (var_data && var_data->type_count > 0)
+	{
+		format_single_var(fmt, var_data);
 
-	emit_space(fmt);
-
-	if (name_token && name_token->lexeme)
-		emit(fmt, name_token->lexeme);
+		/* Output extra variables on same line with commas */
+		if (var_data->extra_count > 0)
+		{
+			for (i = 0; i < var_data->extra_count; i++)
+			{
+				emit(fmt, ", ");
+				format_extra_var(fmt, var_data->extra_vars[i]);
+			}
+		}
+	}
 	else
+	{
+		/* Fallback for old-style nodes */
+		Token *type_token = node->token;
+
+		if (type_token && type_token->lexeme)
+			emit(fmt, type_token->lexeme);
+		emit_space(fmt);
 		emit(fmt, "var");
 
-	if (node->child_count > 0)
-	{
-		emit(fmt, " = ");
-		format_expression(fmt, node->children[0]);
+		if (node->child_count > 0)
+		{
+			emit(fmt, " = ");
+			format_expression(fmt, node->children[0]);
+		}
 	}
 
 	emit(fmt, ";");
@@ -397,6 +643,7 @@ static void format_if(Formatter *fmt, ASTNode *node)
 
 		if (else_branch->type == NODE_IF)
 		{
+			/* Handle else if by removing indent and formatting as "else if" */
 			emit_space(fmt);
 			emit(fmt, "if (");
 			if (else_branch->child_count > 0)
@@ -412,6 +659,65 @@ static void format_if(Formatter *fmt, ASTNode *node)
 					emit_newline(fmt);
 					fmt->indent_level++;
 					format_node(fmt, else_branch->children[1]);
+					fmt->indent_level--;
+				}
+			}
+
+			/* Recursively handle nested else/else-if */
+			if (else_branch->child_count > 2)
+			{
+				ASTNode *nested_else = else_branch->children[2];
+
+				emit_indent(fmt);
+				emit(fmt, "else");
+
+				if (nested_else->type == NODE_IF)
+				{
+					/* Recursive call for else-if chains */
+					emit_space(fmt);
+					/* Re-use format_if but skip the "if" part */
+					emit(fmt, "if (");
+					if (nested_else->child_count > 0)
+						format_expression(fmt, nested_else->children[0]);
+					emit(fmt, ")");
+					if (nested_else->child_count > 1)
+					{
+						if (nested_else->children[1]->type == NODE_BLOCK)
+							format_block(fmt, nested_else->children[1]);
+						else
+						{
+							emit_newline(fmt);
+							fmt->indent_level++;
+							format_node(fmt, nested_else->children[1]);
+							fmt->indent_level--;
+						}
+					}
+					/* Handle deeper nesting if needed */
+					if (nested_else->child_count > 2)
+					{
+						/* Just format the else branch directly */
+						emit_indent(fmt);
+						emit(fmt, "else");
+						if (nested_else->children[2]->type == NODE_BLOCK)
+							format_block(fmt, nested_else->children[2]);
+						else
+						{
+							emit_newline(fmt);
+							fmt->indent_level++;
+							format_node(fmt, nested_else->children[2]);
+							fmt->indent_level--;
+						}
+					}
+				}
+				else if (nested_else->type == NODE_BLOCK)
+				{
+					format_block(fmt, nested_else);
+				}
+				else
+				{
+					emit_newline(fmt);
+					fmt->indent_level++;
+					format_node(fmt, nested_else);
 					fmt->indent_level--;
 				}
 			}
@@ -782,6 +1088,8 @@ static void format_call(Formatter *fmt, ASTNode *node)
 
 static void format_struct(Formatter *fmt, ASTNode *node)
 {
+	int i;
+
 	emit(fmt, "struct");
 
 	if (node->token && node->token->lexeme)
@@ -790,7 +1098,23 @@ static void format_struct(Formatter *fmt, ASTNode *node)
 		emit(fmt, node->token->lexeme);
 	}
 
-	emit_newline(fmt);
+	/* If struct has members (body), format them */
+	if (node->child_count > 0)
+	{
+		emit_newline(fmt);
+		emit(fmt, "{");
+		emit_newline(fmt);
+		fmt->indent_level++;
+
+		for (i = 0; i < node->child_count; i++)
+		{
+			format_node(fmt, node->children[i]);
+		}
+
+		fmt->indent_level--;
+		emit_indent(fmt);
+		emit(fmt, "}");
+	}
 }
 
 /*
@@ -799,14 +1123,47 @@ static void format_struct(Formatter *fmt, ASTNode *node)
 
 static void format_typedef(Formatter *fmt, ASTNode *node)
 {
+	int i;
+	int has_ptr = 0;
+	TypedefData *td_data = (TypedefData *)node->data;
+
 	emit(fmt, "typedef ");
 
+	/* If has struct/enum child, format it */
 	if (node->child_count > 0)
 		format_node(fmt, node->children[0]);
+	else if (td_data && td_data->base_type_count > 0)
+	{
+		/* Check if we have a pointer */
+		for (i = 0; i < td_data->base_type_count; i++)
+		{
+			if (td_data->base_type_tokens[i]->type == TOK_STAR)
+				has_ptr = 1;
+		}
+
+		/* Output base type tokens for simple typedef */
+		for (i = 0; i < td_data->base_type_count; i++)
+		{
+			Token *tok = td_data->base_type_tokens[i];
+
+			if (tok->type == TOK_STAR)
+			{
+				emit(fmt, " *");
+			}
+			else if (tok->lexeme)
+			{
+				if (i > 0)
+					emit_space(fmt);
+				emit(fmt, tok->lexeme);
+			}
+		}
+	}
 
 	if (node->token && node->token->lexeme)
 	{
-		emit_space(fmt);
+		/* Add space before alias unless we just emitted a pointer */
+		if (!has_ptr)
+			emit_space(fmt);
 		emit(fmt, node->token->lexeme);
 	}
 
@@ -820,6 +1177,8 @@ static void format_typedef(Formatter *fmt, ASTNode *node)
 
 static void format_enum(Formatter *fmt, ASTNode *node)
 {
+	int i;
+
 	emit(fmt, "enum");
 
 	if (node->token && node->token->lexeme)
@@ -828,5 +1187,40 @@ static void format_enum(Formatter *fmt, ASTNode *node)
 		emit(fmt, node->token->lexeme);
 	}
 
-	emit_newline(fmt);
+	/* If enum has values, format them */
+	if (node->child_count > 0)
+	{
+		emit_newline(fmt);
+		emit(fmt, "{");
+		emit_newline(fmt);
+		fmt->indent_level++;
+
+		for (i = 0; i < node->child_count; i++)
+		{
+			emit_indent(fmt);
+			/* Emit enum value name */
+			if (node->children[i]->token && node->children[i]->token->lexeme)
+			{
+				emit(fmt, node->children[i]->token->lexeme);
+			}
+
+			/* If it has an initializer value */
+			if (node->children[i]->child_count > 0 && 
+			    node->children[i]->children[0]->token &&
+			    node->children[i]->children[0]->token->lexeme)
+			{
+				emit(fmt, " = ");
+				emit(fmt, node->children[i]->children[0]->token->lexeme);
+			}
+
+			/* Add comma except for last element */
+			if (i < node->child_count - 1)
+				emit(fmt, ",");
+			emit_newline(fmt);
+		}
+
+		fmt->indent_level--;
+		emit_indent(fmt);
+		emit(fmt, "}");
+	}
 }
