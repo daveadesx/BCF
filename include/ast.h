@@ -37,7 +37,11 @@ typedef enum {
 	NODE_CAST,
 	NODE_SIZEOF,
 	NODE_TERNARY,
-	NODE_PARAM
+	NODE_PARAM,
+	NODE_INIT_LIST,
+	NODE_FUNC_PTR,
+	NODE_TYPE_EXPR,  /* Type used as expression (e.g., in va_arg) */
+	NODE_PREPROCESSOR  /* Preprocessor directive (#include, #define, etc.) */
 } NodeType;
 
 /*
@@ -73,6 +77,17 @@ typedef struct TypedefData {
 } TypedefData;
 
 /*
+ * Function pointer data
+ */
+typedef struct FuncPtrData {
+	Token **return_type_tokens;  /* Return type tokens */
+	int return_type_count;
+	Token *name_token;           /* Function pointer name */
+	Token **param_tokens;        /* All tokens in parameter list */
+	int param_count;
+} FuncPtrData;
+
+/*
  * AST node structure
  */
 typedef struct ASTNode {
@@ -88,6 +103,9 @@ typedef struct ASTNode {
 	int leading_comment_count;
 	Token **trailing_comments;
 	int trailing_comment_count;
+
+	/* Blank lines before this node (user-added, max 1 preserved) */
+	int blank_lines_before;
 
 	/* Node-specific data */
 	void *data;

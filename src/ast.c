@@ -34,6 +34,7 @@ ASTNode *ast_node_create(NodeType type, Token *token)
 	node->leading_comment_count = 0;
 	node->trailing_comments = NULL;
 	node->trailing_comment_count = 0;
+	node->blank_lines_before = 0;
 	node->data = NULL;
 
 	return (node);
