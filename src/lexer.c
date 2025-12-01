@@ -631,7 +631,19 @@ static void scan_token(Lexer *lexer)
 	case '~': advance(lexer); add_token(lexer, TOK_TILDE, start, 1); break;
 	case '?': advance(lexer); add_token(lexer, TOK_QUESTION, start, 1); break;
 	case ':': advance(lexer); add_token(lexer, TOK_COLON, start, 1); break;
-	case '.': advance(lexer); add_token(lexer, TOK_DOT, start, 1); break;
+
+	/* . operator: . or ... */
+	case '.':
+		advance(lexer);
+		if (peek(lexer) == '.' && peek_next(lexer) == '.')
+		{
+			advance(lexer);
+			advance(lexer);
+			add_token(lexer, TOK_ELLIPSIS, start, 3);
+		}
+		else
+			add_token(lexer, TOK_DOT, start, 1);
+		break;
 
 	/* + operator: +, ++, += */
 	case '+':
