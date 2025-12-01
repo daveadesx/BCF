@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "../include/lexer.h"
 #include "../include/parser.h"
 #include "../include/formatter.h"
@@ -5,8 +6,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
-/*
+/* Options structure */
+typedef struct {
+	int in_place;      /* -i: modify files in place */
+	int check_only;    /* -c: check if formatted (don't modify) */
+	int show_diff;     /* -d: show diff of changes */
+	char *output_file; /* -o: output to specific file */
+} Options;
+
+/**
  * print_usage - Print usage information
  * @program: Program name
  */
@@ -26,7 +36,7 @@ static void print_usage(const char *program)
 	printf("  %s -c src/*.c                Check if files need formatting\n", program);
 }
 
-/*
+/**
  * print_version - Print version information
  */
 static void print_version(void)
@@ -35,17 +45,112 @@ static void print_version(void)
 	printf("A Betty-compliant C code formatter\n");
 }
 
-/*
- * process_file - Process a single file
- * @filename: File to process
+/**
+ * format_to_string - Format source code and return as string
+ * @source: Source code to format
+ * @out_len: Output parameter for result length
+ *
+ * Return: Formatted string (caller must free), or NULL on error
+ */
+static char *format_to_string(const char *source, size_t *out_len)
+{
+	Lexer *lexer;
+	Parser *parser;
+	char *result = NULL;
+	FILE *mem_stream;
+	size_t size = 0;
+
+	lexer = lexer_create(source);
+	if (!lexer)
+		return (NULL);
+
+	if (lexer_tokenize(lexer) < 0)
+	{
+		lexer_destroy(lexer);
+		return (NULL);
+	}
+
+	parser = parser_create(lexer_get_tokens(lexer),
+			       lexer_get_token_count(lexer));
+	if (!parser)
+	{
+		lexer_destroy(lexer);
+		return (NULL);
+	}
+
+	/* Parse and format to memory stream */
+	{
+		ASTNode *ast = parser_parse(parser);
+
+		if (ast)
+		{
+			mem_stream = open_memstream(&result, &size);
+			if (mem_stream)
+			{
+				Formatter *formatter = formatter_create(mem_stream);
+
+				if (formatter)
+				{
+					formatter_format(formatter, ast);
+					formatter_destroy(formatter);
+				}
+				fclose(mem_stream);
+			}
+			ast_node_destroy(ast);
+		}
+	}
+
+	parser_destroy(parser);
+	lexer_destroy(lexer);
+
+	if (out_len)
+		*out_len = size;
+
+	return (result);
+}
+
+/**
+ * do_write_file - Write content to a file (with length)
+ * @filename: File to write
+ * @content: Content to write
+ * @len: Length of content
  *
  * Return: 0 on success, -1 on error
  */
-static int process_file(const char *filename)
+static int do_write_file(const char *filename, const char *content, size_t len)
+{
+	FILE *fp;
+
+	fp = fopen(filename, "w");
+	if (!fp)
+	{
+		fprintf(stderr, "Error: Could not open '%s' for writing\n", filename);
+		return (-1);
+	}
+
+	if (fwrite(content, 1, len, fp) != len)
+	{
+		fprintf(stderr, "Error: Failed to write to '%s'\n", filename);
+		fclose(fp);
+		return (-1);
+	}
+
+	fclose(fp);
+	return (0);
+}
+
+/**
+ * process_file - Process a single file
+ * @filename: File to process
+ * @opts: Processing options
+ *
+ * Return: 0 on success, 1 if needs formatting (check mode), -1 on error
+ */
+static int process_file(const char *filename, Options *opts)
 {
 	char *source;
-	Lexer *lexer;
-	Parser *parser;
+	char *formatted;
+	size_t formatted_len;
 	int result = 0;
 
 	source = read_file(filename);
@@ -55,71 +160,107 @@ static int process_file(const char *filename)
 		return (-1);
 	}
 
-	lexer = lexer_create(source);
-	if (!lexer)
+	formatted = format_to_string(source, &formatted_len);
+	if (!formatted)
 	{
-		fprintf(stderr, "Error: Failed to create lexer\n");
+		fprintf(stderr, "Error: Failed to format '%s'\n", filename);
 		free(source);
 		return (-1);
 	}
 
-	if (lexer_tokenize(lexer) < 0)
+	/* Check mode: compare and report */
+	if (opts->check_only)
 	{
-		fprintf(stderr, "Error: Tokenization failed\n");
-		lexer_destroy(lexer);
-		free(source);
-		return (-1);
-	}
-
-	parser = parser_create(lexer_get_tokens(lexer),
-			       lexer_get_token_count(lexer));
-	if (!parser)
-	{
-		fprintf(stderr, "Error: Failed to create parser\n");
-		lexer_destroy(lexer);
-		free(source);
-		return (-1);
-	}
-
-	/* Parse the file */
-	{
-		ASTNode *ast = parser_parse(parser);
-
-		if (ast)
+		if (strcmp(source, formatted) != 0)
 		{
-			Formatter *formatter = formatter_create(stdout);
-
-			if (formatter)
-			{
-				formatter_format(formatter, ast);
-				formatter_destroy(formatter);
-			}
-			ast_node_destroy(ast);
+			printf("%s: needs formatting\n", filename);
+			result = 1;
 		}
 		else
 		{
-			fprintf(stderr, "Error: Parsing failed\n");
-			result = -1;
+			printf("%s: OK\n", filename);
 		}
 	}
+	/* Diff mode: show differences */
+	else if (opts->show_diff)
+	{
+		if (strcmp(source, formatted) != 0)
+		{
+			/* Write formatted to temp file and use diff */
+			char temp_path[] = "/tmp/betty-fmt-XXXXXX";
+			int temp_fd = mkstemp(temp_path);
 
-	parser_destroy(parser);
-	lexer_destroy(lexer);
+			if (temp_fd >= 0)
+			{
+				FILE *temp_file = fdopen(temp_fd, "w");
+
+				if (temp_file)
+				{
+					char cmd[512];
+
+					fputs(formatted, temp_file);
+					fclose(temp_file);
+					snprintf(cmd, sizeof(cmd),
+						"diff -u '%s' '%s' | head -100",
+						filename, temp_path);
+					system(cmd);
+				}
+				unlink(temp_path);
+			}
+			result = 1;
+		}
+		else
+		{
+			printf("%s: no changes\n", filename);
+		}
+	}
+	/* In-place mode: write back to file */
+	else if (opts->in_place)
+	{
+		if (strcmp(source, formatted) != 0)
+		{
+			if (do_write_file(filename, formatted, formatted_len) < 0)
+				result = -1;
+			else
+				printf("Formatted: %s\n", filename);
+		}
+		else
+		{
+			/* File already formatted, no change needed */
+		}
+	}
+	/* Output file mode */
+	else if (opts->output_file)
+	{
+		if (do_write_file(opts->output_file, formatted, formatted_len) < 0)
+			result = -1;
+	}
+	/* Default: print to stdout */
+	else
+	{
+		printf("%s", formatted);
+	}
+
+	free(formatted);
 	free(source);
 
 	return (result);
 }
 
-/*
+/**
  * main - Entry point
  * @argc: Argument count
  * @argv: Argument vector
  *
- * Return: 0 on success, 1 on error
+ * Return: 0 on success, 1 on error or if files need formatting (check mode)
  */
 int main(int argc, char **argv)
 {
+	Options opts = {0, 0, 0, NULL};
 	int i;
+	int file_count = 0;
+	int error_count = 0;
+	int needs_format = 0;
 
 	if (argc < 2)
 	{
@@ -127,7 +268,7 @@ int main(int argc, char **argv)
 		return (1);
 	}
 
-	/* Handle options */
+	/* First pass: parse options */
 	for (i = 1; i < argc; i++)
 	{
 		if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
@@ -135,18 +276,77 @@ int main(int argc, char **argv)
 			print_usage(argv[0]);
 			return (0);
 		}
-		else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--version") == 0)
+		else if (strcmp(argv[i], "-v") == 0 ||
+			 strcmp(argv[i], "--version") == 0)
 		{
 			print_version();
 			return (0);
 		}
-		else
+		else if (strcmp(argv[i], "-i") == 0 ||
+			 strcmp(argv[i], "--in-place") == 0)
 		{
-			/* Process file */
-			if (process_file(argv[i]) < 0)
+			opts.in_place = 1;
+		}
+		else if (strcmp(argv[i], "-c") == 0 ||
+			 strcmp(argv[i], "--check") == 0)
+		{
+			opts.check_only = 1;
+		}
+		else if (strcmp(argv[i], "-d") == 0 ||
+			 strcmp(argv[i], "--diff") == 0)
+		{
+			opts.show_diff = 1;
+		}
+		else if (strcmp(argv[i], "-o") == 0 ||
+			 strcmp(argv[i], "--output") == 0)
+		{
+			if (i + 1 < argc)
+			{
+				opts.output_file = argv[++i];
+			}
+			else
+			{
+				fprintf(stderr, "Error: -o requires a filename\n");
 				return (1);
+			}
 		}
 	}
+
+	/* Second pass: process files */
+	for (i = 1; i < argc; i++)
+	{
+		int ret;
+
+		/* Skip options */
+		if (argv[i][0] == '-')
+		{
+			if (strcmp(argv[i], "-o") == 0 ||
+			    strcmp(argv[i], "--output") == 0)
+				i++; /* Skip the output filename too */
+			continue;
+		}
+
+		file_count++;
+		ret = process_file(argv[i], &opts);
+
+		if (ret < 0)
+			error_count++;
+		else if (ret > 0)
+			needs_format++;
+	}
+
+	if (file_count == 0)
+	{
+		fprintf(stderr, "Error: No input files\n");
+		return (1);
+	}
+
+	if (error_count > 0)
+		return (1);
+
+	/* In check mode, return 1 if any files need formatting */
+	if (opts.check_only && needs_format > 0)
+		return (1);
 
 	return (0);
 }
