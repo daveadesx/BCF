@@ -94,6 +94,7 @@ typedef enum {
 	TOK_DECREMENT,      /* -- */
 	TOK_ARROW,          /* -> */
 	TOK_DOT,            /* . */
+	TOK_ELLIPSIS,       /* ... */
 	TOK_QUESTION,       /* ? */
 	TOK_COLON,          /* : */
 
