@@ -17,6 +17,14 @@ typedef struct {
 	int error_count;
 
 	SymbolTable *symbols;  /* Symbol table for typedef tracking */
+
+	/* Comment collection buffer */
+	Token **pending_comments;
+	int pending_comment_count;
+	int pending_comment_capacity;
+
+	/* Trailing comment tracking */
+	int last_token_line;  /* Line of last consumed significant token */
 } Parser;
 
 /* Parser lifecycle */
