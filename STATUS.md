@@ -64,24 +64,9 @@
   - No blank lines between consecutive preprocessor directives
 - **Preprocessor directives**: Output verbatim, no reformatting
 
-## ⚠️ Partial / Known Limitations
+## ⚠️ Partial / Limitations
 
-### Parser Limitations (files left unchanged if encountered)
-- **GCC attributes**: `__attribute__((unused))`, `__attribute__((format(...)))` not supported
-- **Inline struct/union in typedef**: `typedef struct { ... } name;` with body on same line
-- **Compound literals**: `(int[]){1, 2, 3}`
-- **Designated initializers**: `.field = value`, `[0] = value`
-- **Statement expressions**: `({ ... })` (GCC extension)
-- **Complex macros**: Some macro patterns may confuse the parser
-
-### Formatter Limitations
-- **Multi-line function calls**: Collapses to single line when within 80 chars
-- **Array initializer lists**: May collapse multi-line initializers to single line
-- **Comments in structs**: Inline member comments may shift position
-- **Operator precedence parentheses**: May remove "unnecessary" parens that aid readability
-
-### Graceful Degradation
-When the parser encounters unsupported syntax, the file is left **completely unchanged** rather than producing incorrect output. This ensures the formatter never breaks valid code.
+(None currently)
 
 ## Debug Tools
 
