@@ -1,31 +1,19 @@
 #ifndef FORMATTER_H
 #define FORMATTER_H
 
-#include "ast.h"
 #include <stdio.h>
 
 /*
- * Formatter structure
- * Manages pretty-printing of AST to formatted code
+ * Simple C code formatter
+ * Rules:
+ * 1. Blank line after function/struct/variable declarations
+ * 2. Blank line between different preprocessor directive groups
+ * 3. Convert spaces to tabs (8-space tabs)
+ * 4. Remove trailing whitespace
+ * 5. Braces on new lines (except do-while opening brace)
  */
-typedef struct {
-	FILE *output;
-	int indent_level;
-	int column;
-	int line;
-	int at_line_start;
 
-	/* Betty configuration */
-	int indent_width;
-	int use_tabs;
-	int max_line_length;
-} Formatter;
-
-/* Formatter lifecycle */
-Formatter *formatter_create(FILE *output);
-void formatter_destroy(Formatter *formatter);
-
-/* Main formatting */
-int formatter_format(Formatter *formatter, ASTNode *ast);
+/* Format source code and write to output */
+int format_source(const char *source, FILE *output);
 
 #endif /* FORMATTER_H */

@@ -4,7 +4,8 @@ SRC_DIR = src
 INC_DIR = include
 BUILD_DIR = build
 
-SRCS = $(wildcard $(SRC_DIR)/*.c)
+# Only compile the needed source files
+SRCS = $(SRC_DIR)/main.c $(SRC_DIR)/formatter.c $(SRC_DIR)/utils.c
 OBJS = $(SRCS:$(SRC_DIR)/%.c=$(BUILD_DIR)/%.o)
 TARGET = betty-fmt
 

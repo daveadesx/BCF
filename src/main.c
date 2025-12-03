@@ -1,6 +1,4 @@
 #define _GNU_SOURCE
-#include "../include/lexer.h"
-#include "../include/parser.h"
 #include "../include/formatter.h"
 #include "../include/utils.h"
 #include <stdio.h>
@@ -54,54 +52,25 @@ static void print_version(void)
  */
 static char *format_to_string(const char *source, size_t *out_len)
 {
-	Lexer *lexer;
-	Parser *parser;
 	char *result = NULL;
 	FILE *mem_stream;
 	size_t size = 0;
 
-	lexer = lexer_create(source);
-	if (!lexer)
+	if (!source)
 		return (NULL);
 
-	if (lexer_tokenize(lexer) < 0)
-	{
-		lexer_destroy(lexer);
+	mem_stream = open_memstream(&result, &size);
+	if (!mem_stream)
 		return (NULL);
-	}
 
-	parser = parser_create(lexer_get_tokens(lexer),
-			       lexer_get_token_count(lexer));
-	if (!parser)
+	if (format_source(source, mem_stream) < 0)
 	{
-		lexer_destroy(lexer);
+		fclose(mem_stream);
+		free(result);
 		return (NULL);
 	}
 
-	/* Parse and format to memory stream */
-	{
-		ASTNode *ast = parser_parse(parser);
-
-		if (ast)
-		{
-			mem_stream = open_memstream(&result, &size);
-			if (mem_stream)
-			{
-				Formatter *formatter = formatter_create(mem_stream);
-
-				if (formatter)
-				{
-					formatter_format(formatter, ast);
-					formatter_destroy(formatter);
-				}
-				fclose(mem_stream);
-			}
-			ast_node_destroy(ast);
-		}
-	}
-
-	parser_destroy(parser);
-	lexer_destroy(lexer);
+	fclose(mem_stream);
 
 	if (out_len)
 		*out_len = size;
@@ -110,33 +79,62 @@ static char *format_to_string(const char *source, size_t *out_len)
 }
 
 /**
- * do_write_file - Write content to a file (with length)
- * @filename: File to write
- * @content: Content to write
- * @len: Length of content
+ * files_differ - Check if two strings differ
+ * @s1: First string
+ * @s2: Second string
  *
- * Return: 0 on success, -1 on error
+ * Return: 1 if different, 0 if same
  */
-static int do_write_file(const char *filename, const char *content, size_t len)
+static int files_differ(const char *s1, const char *s2)
 {
-	FILE *fp;
+	if (!s1 || !s2)
+		return (1);
 
-	fp = fopen(filename, "w");
-	if (!fp)
+	return (strcmp(s1, s2) != 0);
+}
+
+/**
+ * show_diff - Print diff between original and formatted
+ * @filename: File name for header
+ * @original: Original content
+ * @formatted: Formatted content
+ */
+static void show_diff(const char *filename, const char *original,
+		      const char *formatted)
+{
+	FILE *orig_file, *fmt_file;
+	char orig_path[] = "/tmp/betty-fmt-orig.XXXXXX";
+	char fmt_path[] = "/tmp/betty-fmt-fmt.XXXXXX";
+	char cmd[512];
+	int orig_fd, fmt_fd;
+
+	orig_fd = mkstemp(orig_path);
+	fmt_fd = mkstemp(fmt_path);
+
+	if (orig_fd < 0 || fmt_fd < 0)
 	{
-		fprintf(stderr, "Error: Could not open '%s' for writing\n", filename);
-		return (-1);
+		fprintf(stderr, "Error creating temp files for diff\n");
+		return;
 	}
 
-	if (fwrite(content, 1, len, fp) != len)
+	orig_file = fdopen(orig_fd, "w");
+	fmt_file = fdopen(fmt_fd, "w");
+
+	if (orig_file && fmt_file)
 	{
-		fprintf(stderr, "Error: Failed to write to '%s'\n", filename);
-		fclose(fp);
-		return (-1);
+		fputs(original, orig_file);
+		fputs(formatted, fmt_file);
+		fclose(orig_file);
+		fclose(fmt_file);
+
+		snprintf(cmd, sizeof(cmd), "diff -u --label '%s (original)' "
+			 "--label '%s (formatted)' '%s' '%s'",
+			 filename, filename, orig_path, fmt_path);
+		system(cmd);
 	}
 
-	fclose(fp);
-	return (0);
+	unlink(orig_path);
+	unlink(fmt_path);
 }
 
 /**
@@ -144,209 +142,168 @@ static int do_write_file(const char *filename, const char *content, size_t len)
  * @filename: File to process
  * @opts: Processing options
  *
- * Return: 0 on success, 1 if needs formatting (check mode), -1 on error
+ * Return: 0 on success, 1 if file needs formatting (check mode), -1 on error
  */
 static int process_file(const char *filename, Options *opts)
 {
 	char *source;
 	char *formatted;
-	size_t formatted_len;
+	size_t fmt_len;
+	FILE *output;
 	int result = 0;
 
 	source = read_file(filename);
 	if (!source)
 	{
-		fprintf(stderr, "Error: Could not read file '%s'\n", filename);
+		fprintf(stderr, "Error reading %s\n", filename);
 		return (-1);
 	}
 
-	formatted = format_to_string(source, &formatted_len);
+	formatted = format_to_string(source, &fmt_len);
 	if (!formatted)
 	{
-		fprintf(stderr, "Error: Failed to format '%s'\n", filename);
+		fprintf(stderr, "Error formatting %s\n", filename);
 		free(source);
 		return (-1);
 	}
 
-	/* Check mode: compare and report */
 	if (opts->check_only)
 	{
-		if (strcmp(source, formatted) != 0)
+		if (files_differ(source, formatted))
 		{
-			printf("%s: needs formatting\n", filename);
+			printf("%s needs formatting\n", filename);
 			result = 1;
 		}
-		else
-		{
-			printf("%s: OK\n", filename);
-		}
 	}
-	/* Diff mode: show differences */
 	else if (opts->show_diff)
 	{
-		if (strcmp(source, formatted) != 0)
-		{
-			/* Write formatted to temp file and use diff */
-			char temp_path[] = "/tmp/betty-fmt-XXXXXX";
-			int temp_fd = mkstemp(temp_path);
-
-			if (temp_fd >= 0)
-			{
-				FILE *temp_file = fdopen(temp_fd, "w");
-
-				if (temp_file)
-				{
-					char cmd[512];
-
-					fputs(formatted, temp_file);
-					fclose(temp_file);
-					snprintf(cmd, sizeof(cmd),
-						"diff -u '%s' '%s' | head -100",
-						filename, temp_path);
-					system(cmd);
-				}
-				unlink(temp_path);
-			}
-			result = 1;
-		}
-		else
-		{
-			printf("%s: no changes\n", filename);
-		}
+		if (files_differ(source, formatted))
+			show_diff(filename, source, formatted);
 	}
-	/* In-place mode: write back to file */
 	else if (opts->in_place)
 	{
-		if (strcmp(source, formatted) != 0)
+		if (files_differ(source, formatted))
 		{
-			if (do_write_file(filename, formatted, formatted_len) < 0)
+			output = fopen(filename, "w");
+			if (!output)
+			{
+				fprintf(stderr, "Error writing %s\n", filename);
 				result = -1;
+			}
 			else
-				printf("Formatted: %s\n", filename);
+			{
+				fputs(formatted, output);
+				fclose(output);
+				printf("Formatted %s\n", filename);
+			}
+		}
+	}
+	else if (opts->output_file)
+	{
+		output = fopen(opts->output_file, "w");
+		if (!output)
+		{
+			fprintf(stderr, "Error writing %s\n", opts->output_file);
+			result = -1;
 		}
 		else
 		{
-			/* File already formatted, no change needed */
+			fputs(formatted, output);
+			fclose(output);
 		}
 	}
-	/* Output file mode */
-	else if (opts->output_file)
-	{
-		if (do_write_file(opts->output_file, formatted, formatted_len) < 0)
-			result = -1;
-	}
-	/* Default: print to stdout */
 	else
 	{
+		/* Output to stdout */
 		printf("%s", formatted);
 	}
 
-	free(formatted);
 	free(source);
-
+	free(formatted);
 	return (result);
 }
 
 /**
  * main - Entry point
  * @argc: Argument count
- * @argv: Argument vector
+ * @argv: Arguments
  *
- * Return: 0 on success, 1 on error or if files need formatting (check mode)
+ * Return: 0 on success, non-zero on error
  */
-int main(int argc, char **argv)
+int main(int argc, char *argv[])
 {
-	Options opts = {0, 0, 0, NULL};
+	Options opts = {0};
 	int i;
 	int file_count = 0;
-	int error_count = 0;
-	int needs_format = 0;
+	int result = 0;
+	int file_result;
 
-	if (argc < 2)
-	{
-		print_usage(argv[0]);
-		return (1);
-	}
-
-	/* First pass: parse options */
+	/* Parse arguments */
 	for (i = 1; i < argc; i++)
 	{
-		if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0)
+		if (argv[i][0] == '-')
 		{
-			print_usage(argv[0]);
-			return (0);
-		}
-		else if (strcmp(argv[i], "-v") == 0 ||
-			 strcmp(argv[i], "--version") == 0)
-		{
-			print_version();
-			return (0);
-		}
-		else if (strcmp(argv[i], "-i") == 0 ||
-			 strcmp(argv[i], "--in-place") == 0)
-		{
-			opts.in_place = 1;
-		}
-		else if (strcmp(argv[i], "-c") == 0 ||
-			 strcmp(argv[i], "--check") == 0)
-		{
-			opts.check_only = 1;
-		}
-		else if (strcmp(argv[i], "-d") == 0 ||
-			 strcmp(argv[i], "--diff") == 0)
-		{
-			opts.show_diff = 1;
-		}
-		else if (strcmp(argv[i], "-o") == 0 ||
-			 strcmp(argv[i], "--output") == 0)
-		{
-			if (i + 1 < argc)
+			if (strcmp(argv[i], "-h") == 0 ||
+			    strcmp(argv[i], "--help") == 0)
+			{
+				print_usage(argv[0]);
+				return (0);
+			}
+			else if (strcmp(argv[i], "-v") == 0 ||
+				 strcmp(argv[i], "--version") == 0)
+			{
+				print_version();
+				return (0);
+			}
+			else if (strcmp(argv[i], "-i") == 0 ||
+				 strcmp(argv[i], "--in-place") == 0)
+			{
+				opts.in_place = 1;
+			}
+			else if (strcmp(argv[i], "-c") == 0 ||
+				 strcmp(argv[i], "--check") == 0)
+			{
+				opts.check_only = 1;
+			}
+			else if (strcmp(argv[i], "-d") == 0 ||
+				 strcmp(argv[i], "--diff") == 0)
+			{
+				opts.show_diff = 1;
+			}
+			else if ((strcmp(argv[i], "-o") == 0 ||
+				  strcmp(argv[i], "--output") == 0) &&
+				 i + 1 < argc)
 			{
 				opts.output_file = argv[++i];
 			}
 			else
 			{
-				fprintf(stderr, "Error: -o requires a filename\n");
+				fprintf(stderr, "Unknown option: %s\n", argv[i]);
 				return (1);
 			}
 		}
 	}
 
-	/* Second pass: process files */
+	/* Process files */
 	for (i = 1; i < argc; i++)
 	{
-		int ret;
-
-		/* Skip options */
-		if (argv[i][0] == '-')
+		if (argv[i][0] != '-' &&
+		    (i == 1 || strcmp(argv[i - 1], "-o") != 0))
 		{
-			if (strcmp(argv[i], "-o") == 0 ||
-			    strcmp(argv[i], "--output") == 0)
-				i++; /* Skip the output filename too */
-			continue;
+			file_count++;
+			file_result = process_file(argv[i], &opts);
+			if (file_result < 0)
+				result = 1;
+			else if (file_result > 0 && opts.check_only)
+				result = 1;
 		}
-
-		file_count++;
-		ret = process_file(argv[i], &opts);
-
-		if (ret < 0)
-			error_count++;
-		else if (ret > 0)
-			needs_format++;
 	}
 
 	if (file_count == 0)
 	{
-		fprintf(stderr, "Error: No input files\n");
+		print_usage(argv[0]);
 		return (1);
 	}
 
-	if (error_count > 0)
-		return (1);
-
-	/* In check mode, return 1 if any files need formatting */
-	if (opts.check_only && needs_format > 0)
-		return (1);
-
-	return (0);
+	return (result);
 }
