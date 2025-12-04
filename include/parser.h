@@ -15,6 +15,7 @@ typedef struct {
 	int current;
 
 	int error_count;
+	int whitespace_start;
 
 	SymbolTable *symbols;  /* Symbol table for typedef tracking */
 

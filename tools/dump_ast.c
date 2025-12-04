@@ -44,6 +44,11 @@ static const char *node_type_to_string(NodeType type)
 	case NODE_CAST: return "CAST";
 	case NODE_SIZEOF: return "SIZEOF";
 	case NODE_TERNARY: return "TERNARY";
+	case NODE_FUNC_PTR: return "FUNC_PTR";
+	case NODE_PREPROCESSOR: return "PREPROCESSOR";
+	case NODE_TYPE_EXPR: return "TYPE_EXPR";
+	case NODE_INIT_LIST: return "INIT_LIST";
+	case NODE_UNPARSED: return "UNPARSED";
 	default: return "UNKNOWN";
 	}
 }

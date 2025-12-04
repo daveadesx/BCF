@@ -7,19 +7,33 @@
 
 /* Forward declarations */
 static char peek(Lexer *lexer);
+
 static char peek_next(Lexer *lexer);
+
 static char advance(Lexer *lexer);
+
 static int match(Lexer *lexer, char expected);
+
 static int is_at_end(Lexer *lexer);
+
 static int add_token(Lexer *lexer, TokenType type, int start, int length);
+
 static void scan_token(Lexer *lexer);
+
 static void scan_whitespace(Lexer *lexer);
+
 static void scan_identifier(Lexer *lexer);
+
 static void scan_number(Lexer *lexer);
+
 static void scan_string(Lexer *lexer);
+
 static void scan_char(Lexer *lexer);
+
 static void scan_comment(Lexer *lexer);
+
 static void scan_preprocessor(Lexer *lexer);
+
 static TokenType keyword_type(const char *text);
 
 /*
@@ -34,18 +48,15 @@ Lexer *lexer_create(const char *source)
 
 	if (!source)
 		return (NULL);
-
 	lexer = malloc(sizeof(Lexer));
 	if (!lexer)
 		return (NULL);
-
 	lexer->source = strdup(source);
 	if (!lexer->source)
 	{
 		free(lexer);
 		return (NULL);
 	}
-
 	lexer->source_len = strlen(source);
 	lexer->pos = 0;
 	lexer->line = 1;
@@ -61,7 +72,6 @@ Lexer *lexer_create(const char *source)
 		free(lexer);
 		return (NULL);
 	}
-
 	lexer->token_count = 0;
 	lexer->error_count = 0;
 
@@ -78,8 +88,7 @@ void lexer_destroy(Lexer *lexer)
 
 	if (!lexer)
 		return;
-
-	for (i = 0; i < lexer->token_count; i++)
+	for (i = 0; i < lexer->token_count; ++i)
 		token_destroy(lexer->tokens[i]);
 
 	free(lexer->tokens);
@@ -90,7 +99,6 @@ void lexer_destroy(Lexer *lexer)
 /*
  * Helper functions for lexer
  */
-
 /*
  * peek - Get current character without advancing
  * @lexer: Lexer instance
@@ -110,7 +118,8 @@ static char peek(Lexer *lexer)
  *
  * Return: Next character, or '\0' if at end
  */
-static char peek_next(Lexer *lexer) __attribute__((unused));
+static char peek_next(Lexer *lexer);
+
 static char peek_next(Lexer *lexer)
 {
 	if (lexer->pos + 1 >= lexer->source_len)
@@ -126,11 +135,11 @@ static char peek_next(Lexer *lexer)
  */
 static char advance(Lexer *lexer)
 {
-	char c = lexer->source[lexer->pos++];
+	char c = lexer->source[++lexer->pos];
 
 	lexer->last_line = lexer->line;
 	lexer->last_column = lexer->column;
-	lexer->column++;
+	++lexer->column;
 	return (c);
 }
 
@@ -141,17 +150,17 @@ static char advance(Lexer *lexer)
  *
  * Return: 1 if matched and consumed, 0 otherwise
  */
-static int match(Lexer *lexer, char expected) __attribute__((unused));
+static int match(Lexer *lexer, char expected);
+
 static int match(Lexer *lexer, char expected)
 {
 	if (is_at_end(lexer))
-		return (0);
+		return ((0));
 	if (lexer->source[lexer->pos] != expected)
-		return (0);
-
-	lexer->pos++;
-	lexer->column++;
-	return (1);
+		return ((0));
+	++lexer->pos;
+	++lexer->column;
+	return ((1));
 }
 
 /*
@@ -186,19 +195,15 @@ static int add_token(Lexer *lexer, TokenType type, int start, int length)
 	if (lexer->token_count >= lexer->token_capacity)
 	{
 		new_capacity = lexer->token_capacity * 2;
-		new_tokens = realloc(lexer->tokens,
-				     sizeof(Token *) * new_capacity);
+		new_tokens = realloc(lexer->tokens, sizeof(Token *) * new_capacity);
 		if (!new_tokens)
 			return (-1);
-
 		lexer->tokens = new_tokens;
 		lexer->token_capacity = new_capacity;
 	}
-
 	lexeme = malloc(length + 1);
 	if (!lexeme)
 		return (-1);
-
 	memcpy(lexeme, &lexer->source[start], length);
 	lexeme[length] = '\0';
 
@@ -207,9 +212,8 @@ static int add_token(Lexer *lexer, TokenType type, int start, int length)
 
 	if (!token)
 		return (-1);
-
-	lexer->tokens[lexer->token_count++] = token;
-	return (0);
+	lexer->tokens[++lexer->token_count] = token;
+	return ((0));
 }
 
 /*
@@ -220,36 +224,18 @@ static int add_token(Lexer *lexer, TokenType type, int start, int length)
  */
 static TokenType keyword_type(const char *text)
 {
-	typedef struct {
+typedef struct
+{
 		const char *word;
 		TokenType type;
 	} Keyword;
-
-	static const Keyword keywords[] = {
-		{"if", TOK_IF}, {"else", TOK_ELSE}, {"while", TOK_WHILE},
-		{"for", TOK_FOR}, {"do", TOK_DO}, {"switch", TOK_SWITCH},
-		{"case", TOK_CASE}, {"default", TOK_DEFAULT},
-		{"break", TOK_BREAK}, {"continue", TOK_CONTINUE},
-		{"return", TOK_RETURN}, {"goto", TOK_GOTO},
-		{"typedef", TOK_TYPEDEF}, {"struct", TOK_STRUCT},
-		{"union", TOK_UNION}, {"enum", TOK_ENUM},
-		{"sizeof", TOK_SIZEOF}, {"void", TOK_VOID},
-		{"char", TOK_CHAR_KW}, {"short", TOK_SHORT},
-		{"int", TOK_INT}, {"long", TOK_LONG},
-		{"float", TOK_FLOAT_KW}, {"double", TOK_DOUBLE},
-		{"signed", TOK_SIGNED}, {"unsigned", TOK_UNSIGNED},
-		{"const", TOK_CONST}, {"volatile", TOK_VOLATILE},
-		{"static", TOK_STATIC}, {"extern", TOK_EXTERN},
-		{"auto", TOK_AUTO}, {"register", TOK_REGISTER},
-		{NULL, TOK_IDENTIFIER}
-	};
-
+	static const Keyword keywords[] = {{"if", TOK_IF}, {"else", TOK_ELSE}, {"while", TOK_WHILE}, {"for", TOK_FOR}, {"do", TOK_DO}, {"switch", TOK_SWITCH}, {"case", TOK_CASE}, {"default", TOK_DEFAULT}, {"break", TOK_BREAK}, {"continue", TOK_CONTINUE}, {"return", TOK_RETURN}, {"goto", TOK_GOTO}, {"typedef", TOK_TYPEDEF}, {"struct", TOK_STRUCT}, {"union", TOK_UNION}, {"enum", TOK_ENUM}, {"sizeof", TOK_SIZEOF}, {"void", TOK_VOID}, {"char", TOK_CHAR_KW}, {"short", TOK_SHORT}, {"int", TOK_INT}, {"long", TOK_LONG}, {"float", TOK_FLOAT_KW}, {"double", TOK_DOUBLE}, {"signed", TOK_SIGNED}, {"unsigned", TOK_UNSIGNED}, {"const", TOK_CONST}, {"volatile", TOK_VOLATILE}, {"static", TOK_STATIC}, {"extern", TOK_EXTERN}, {"auto", TOK_AUTO}, {"register", TOK_REGISTER}, {NULL, TOK_IDENTIFIER}};
 	int i;
 
-	for (i = 0; keywords[i].word != NULL; i++)
+	for (i = 0; keywords[i]->word != NULL; ++i)
 	{
-		if (strcmp(text, keywords[i].word) == 0)
-			return (keywords[i].type);
+		if (strcmp(text, keywords[i]->word) == 0)
+			return (keywords[i]->type);
 	}
 
 	return (TOK_IDENTIFIER);
@@ -268,6 +254,7 @@ static void scan_whitespace(Lexer *lexer)
 
 	add_token(lexer, TOK_WHITESPACE, start, lexer->pos - start);
 }
+
 /*
  * scan_identifier - Scan identifier or keyword
  * @lexer: Lexer instance
@@ -286,10 +273,9 @@ static void scan_identifier(Lexer *lexer)
 	text = malloc(length + 1);
 	if (!text)
 	{
-		lexer->error_count++;
+		++lexer->error_count;
 		return;
 	}
-
 	memcpy(text, &lexer->source[start], length);
 	text[length] = '\0';
 
@@ -319,7 +305,7 @@ static void scan_number(Lexer *lexer)
 	if (peek(lexer) == '0')
 	{
 		advance(lexer);
-
+		/* Otherwise it's just '0' - fall through to rest of decimal handling */
 		if (peek(lexer) == 'x' || peek(lexer) == 'X')
 		{
 			/* Hexadecimal */
@@ -327,8 +313,7 @@ static void scan_number(Lexer *lexer)
 			while (!is_at_end(lexer))
 			{
 				c = peek(lexer);
-				if (is_digit(c) || (c >= 'a' && c <= 'f') ||
-				    (c >= 'A' && c <= 'F'))
+				if (is_digit(c) || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F')
 					advance(lexer);
 				else
 					break;
@@ -339,13 +324,11 @@ static void scan_number(Lexer *lexer)
 		else if (is_digit(peek(lexer)))
 		{
 			/* Octal */
-			while (!is_at_end(lexer) && peek(lexer) >= '0' &&
-			       peek(lexer) <= '7')
+			while (!is_at_end(lexer) && peek(lexer) >= '0' && peek(lexer) <= '7')
 				advance(lexer);
 			add_token(lexer, TOK_INTEGER, start, lexer->pos - start);
 			return;
 		}
-		/* Otherwise it's just '0' - fall through to rest of decimal handling */
 	}
 	else
 	{
@@ -355,6 +338,7 @@ static void scan_number(Lexer *lexer)
 	}
 
 	/* Check for decimal point (float) */
+	/* Check for exponent (e or E) */
 	if (peek(lexer) == '.' && is_digit(peek_next(lexer)))
 	{
 		type = TOK_FLOAT;
@@ -362,27 +346,21 @@ static void scan_number(Lexer *lexer)
 		while (!is_at_end(lexer) && is_digit(peek(lexer)))
 			advance(lexer);
 	}
-
-	/* Check for exponent (e or E) */
+	/* Check for float suffix (f or F) */
 	if (peek(lexer) == 'e' || peek(lexer) == 'E')
 	{
 		type = TOK_FLOAT;
 		advance(lexer); /* consume 'e'/'E' */
-
 		if (peek(lexer) == '+' || peek(lexer) == '-')
 			advance(lexer); /* consume sign */
-
 		while (!is_at_end(lexer) && is_digit(peek(lexer)))
 			advance(lexer);
 	}
-
-	/* Check for float suffix (f or F) */
 	if (peek(lexer) == 'f' || peek(lexer) == 'F')
 	{
 		type = TOK_FLOAT;
 		advance(lexer);
 	}
-
 	add_token(lexer, type, start, lexer->pos - start);
 }
 
@@ -407,7 +385,7 @@ static void scan_string(Lexer *lexer)
 		else if (peek(lexer) == '\n')
 		{
 			/* Unterminated string */
-			lexer->error_count++;
+			++lexer->error_count;
 			return;
 		}
 		else
@@ -419,11 +397,10 @@ static void scan_string(Lexer *lexer)
 	if (is_at_end(lexer))
 	{
 		/* Unterminated string */
-		lexer->error_count++;
+		++lexer->error_count;
 		add_token(lexer, TOK_ERROR, start, lexer->pos - start);
 		return;
 	}
-
 	advance(lexer); /* consume closing " */
 	add_token(lexer, TOK_STRING, start, lexer->pos - start);
 }
@@ -448,15 +425,13 @@ static void scan_char(Lexer *lexer)
 	{
 		advance(lexer); /* consume character */
 	}
-
 	if (is_at_end(lexer) || peek(lexer) != '\'')
 	{
 		/* Unterminated or invalid char literal */
-		lexer->error_count++;
+		++lexer->error_count;
 		add_token(lexer, TOK_ERROR, start, lexer->pos - start);
 		return;
 	}
-
 	advance(lexer); /* consume closing ' */
 	add_token(lexer, TOK_CHAR, start, lexer->pos - start);
 }
@@ -477,10 +452,8 @@ static void scan_comment(Lexer *lexer)
 		/* Line comment: // ... */
 		type = TOK_COMMENT_LINE;
 		advance(lexer); /* consume second / */
-
 		while (!is_at_end(lexer) && peek(lexer) != '\n')
 			advance(lexer);
-
 		add_token(lexer, type, start, lexer->pos - start);
 	}
 	else if (peek(lexer) == '*')
@@ -488,7 +461,6 @@ static void scan_comment(Lexer *lexer)
 		/* Block comment */
 		type = TOK_COMMENT_BLOCK;
 		advance(lexer); /* consume * */
-
 		while (!is_at_end(lexer))
 		{
 			if (peek(lexer) == '*' && peek_next(lexer) == '/')
@@ -497,16 +469,13 @@ static void scan_comment(Lexer *lexer)
 				advance(lexer); /* consume / */
 				break;
 			}
-
 			if (peek(lexer) == '\n')
 			{
-				lexer->line++;
+				++lexer->line;
 				lexer->column = 0;
 			}
-
 			advance(lexer);
 		}
-
 		add_token(lexer, type, start, lexer->pos - start);
 	}
 	else if (peek(lexer) == '=')
@@ -543,7 +512,7 @@ static void scan_preprocessor(Lexer *lexer)
 			/* Line continuation: consume backslash and newline */
 			advance(lexer); /* consume \ */
 			advance(lexer); /* consume \n */
-			lexer->line++;
+			++lexer->line;
 			lexer->column = 1;
 		}
 		else if (peek(lexer) == '\n')
@@ -574,69 +543,91 @@ static void scan_token(Lexer *lexer)
 		scan_whitespace(lexer);
 		return;
 	}
-
 	if (c == '\n')
 	{
 		advance(lexer);
 		add_token(lexer, TOK_NEWLINE, start, 1);
-		lexer->line++;
+		++lexer->line;
 		lexer->column = 1;
 		return;
 	}
-
 	if (is_alpha(c))
 	{
 		scan_identifier(lexer);
 		return;
 	}
-
 	if (is_digit(c))
 	{
 		scan_number(lexer);
 		return;
 	}
-
 	if (c == '"')
 	{
 		scan_string(lexer);
 		return;
 	}
-
 	if (c == '\'')
 	{
 		scan_char(lexer);
 		return;
 	}
-
 	if (c == '/')
 	{
 		scan_comment(lexer);
 		return;
 	}
-
+	/* Operators and punctuation (check multi-character first) */
 	if (c == '#')
 	{
 		scan_preprocessor(lexer);
 		return;
 	}
-
-	/* Operators and punctuation (check multi-character first) */
 	switch (c)
 	{
-	/* Simple punctuation */
-	case '(': advance(lexer); add_token(lexer, TOK_LPAREN, start, 1); break;
-	case ')': advance(lexer); add_token(lexer, TOK_RPAREN, start, 1); break;
-	case '{': advance(lexer); add_token(lexer, TOK_LBRACE, start, 1); break;
-	case '}': advance(lexer); add_token(lexer, TOK_RBRACE, start, 1); break;
-	case '[': advance(lexer); add_token(lexer, TOK_LBRACKET, start, 1); break;
-	case ']': advance(lexer); add_token(lexer, TOK_RBRACKET, start, 1); break;
-	case ';': advance(lexer); add_token(lexer, TOK_SEMICOLON, start, 1); break;
-	case ',': advance(lexer); add_token(lexer, TOK_COMMA, start, 1); break;
-	case '~': advance(lexer); add_token(lexer, TOK_TILDE, start, 1); break;
-	case '?': advance(lexer); add_token(lexer, TOK_QUESTION, start, 1); break;
-	case ':': advance(lexer); add_token(lexer, TOK_COLON, start, 1); break;
-
-	/* . operator: . or ... */
+	case '(':
+		advance(lexer);
+		add_token(lexer, TOK_LPAREN, start, 1);
+		break;
+	case ')':
+		advance(lexer);
+		add_token(lexer, TOK_RPAREN, start, 1);
+		break;
+	case '{':
+		advance(lexer);
+		add_token(lexer, TOK_LBRACE, start, 1);
+		break;
+	case '}':
+		advance(lexer);
+		add_token(lexer, TOK_RBRACE, start, 1);
+		break;
+	case '[':
+		advance(lexer);
+		add_token(lexer, TOK_LBRACKET, start, 1);
+		break;
+	case ']':
+		advance(lexer);
+		add_token(lexer, TOK_RBRACKET, start, 1);
+		break;
+	case ';':
+		advance(lexer);
+		add_token(lexer, TOK_SEMICOLON, start, 1);
+		break;
+	case ',':
+		advance(lexer);
+		add_token(lexer, TOK_COMMA, start, 1);
+		break;
+	case '~':
+		advance(lexer);
+		add_token(lexer, TOK_TILDE, start, 1);
+		break;
+	case '?':
+		advance(lexer);
+		add_token(lexer, TOK_QUESTION, start, 1);
+		break;
+	case ':':
+		advance(lexer);
+		add_token(lexer, TOK_COLON, start, 1);
+		break;
 	case '.':
 		advance(lexer);
 		if (peek(lexer) == '.' && peek_next(lexer) == '.')
@@ -648,8 +639,6 @@ static void scan_token(Lexer *lexer)
 		else
 			add_token(lexer, TOK_DOT, start, 1);
 		break;
-
-	/* + operator: +, ++, += */
 	case '+':
 		advance(lexer);
 		if (match(lexer, '+'))
@@ -659,8 +648,6 @@ static void scan_token(Lexer *lexer)
 		else
 			add_token(lexer, TOK_PLUS, start, 1);
 		break;
-
-	/* - operator: -, --, -=, -> */
 	case '-':
 		advance(lexer);
 		if (match(lexer, '-'))
@@ -672,8 +659,6 @@ static void scan_token(Lexer *lexer)
 		else
 			add_token(lexer, TOK_MINUS, start, 1);
 		break;
-
-	/* * operator: *, *= */
 	case '*':
 		advance(lexer);
 		if (match(lexer, '='))
@@ -681,8 +666,6 @@ static void scan_token(Lexer *lexer)
 		else
 			add_token(lexer, TOK_STAR, start, 1);
 		break;
-
-	/* % operator: %, %= */
 	case '%':
 		advance(lexer);
 		if (match(lexer, '='))
@@ -690,8 +673,6 @@ static void scan_token(Lexer *lexer)
 		else
 			add_token(lexer, TOK_PERCENT, start, 1);
 		break;
-
-	/* = operator: =, == */
 	case '=':
 		advance(lexer);
 		if (match(lexer, '='))
@@ -699,8 +680,6 @@ static void scan_token(Lexer *lexer)
 		else
 			add_token(lexer, TOK_ASSIGN, start, 1);
 		break;
-
-	/* ! operator: !, != */
 	case '!':
 		advance(lexer);
 		if (match(lexer, '='))
@@ -708,8 +687,6 @@ static void scan_token(Lexer *lexer)
 		else
 			add_token(lexer, TOK_LOGICAL_NOT, start, 1);
 		break;
-
-	/* < operator: <, <=, <<, <<= */
 	case '<':
 		advance(lexer);
 		if (match(lexer, '='))
@@ -724,8 +701,6 @@ static void scan_token(Lexer *lexer)
 		else
 			add_token(lexer, TOK_LESS, start, 1);
 		break;
-
-	/* > operator: >, >=, >>, >>= */
 	case '>':
 		advance(lexer);
 		if (match(lexer, '='))
@@ -740,8 +715,6 @@ static void scan_token(Lexer *lexer)
 		else
 			add_token(lexer, TOK_GREATER, start, 1);
 		break;
-
-	/* & operator: &, &&, &= */
 	case '&':
 		advance(lexer);
 		if (match(lexer, '&'))
@@ -751,8 +724,6 @@ static void scan_token(Lexer *lexer)
 		else
 			add_token(lexer, TOK_AMPERSAND, start, 1);
 		break;
-
-	/* | operator: |, ||, |= */
 	case '|':
 		advance(lexer);
 		if (match(lexer, '|'))
@@ -762,8 +733,6 @@ static void scan_token(Lexer *lexer)
 		else
 			add_token(lexer, TOK_PIPE, start, 1);
 		break;
-
-	/* ^ operator: ^, ^= */
 	case '^':
 		advance(lexer);
 		if (match(lexer, '='))
@@ -771,11 +740,10 @@ static void scan_token(Lexer *lexer)
 		else
 			add_token(lexer, TOK_CARET, start, 1);
 		break;
-
 	default:
 		advance(lexer);
 		add_token(lexer, TOK_ERROR, start, 1);
-		lexer->error_count++;
+		++lexer->error_count;
 		break;
 	}
 }
@@ -790,12 +758,9 @@ int lexer_tokenize(Lexer *lexer)
 {
 	if (!lexer)
 		return (-1);
-
 	while (!is_at_end(lexer))
 		scan_token(lexer);
-
 	add_token(lexer, TOK_EOF, lexer->pos, 0);
-
 	return (lexer->error_count > 0 ? -1 : 0);
 }
 

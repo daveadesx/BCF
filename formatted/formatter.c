@@ -4,31 +4,54 @@
 
 /* Forward declarations */
 static void format_node(Formatter *fmt, ASTNode *node);
+
 static void format_program(Formatter *fmt, ASTNode *node);
+
 static void format_function(Formatter *fmt, ASTNode *node);
+
 static void format_block(Formatter *fmt, ASTNode *node);
+
 static void format_var_decl(Formatter *fmt, ASTNode *node);
+
 static void format_func_ptr(Formatter *fmt, ASTNode *node);
+
 static void format_if(Formatter *fmt, ASTNode *node);
+
 static void format_while(Formatter *fmt, ASTNode *node);
+
 static void format_for(Formatter *fmt, ASTNode *node);
+
 static void format_do_while(Formatter *fmt, ASTNode *node);
+
 static void format_switch(Formatter *fmt, ASTNode *node);
+
 static void format_return(Formatter *fmt, ASTNode *node);
+
 static void format_expression(Formatter *fmt, ASTNode *node);
+
 static void format_unparsed(Formatter *fmt, ASTNode *node);
+
 static void format_binary(Formatter *fmt, ASTNode *node);
+
 static void format_unary(Formatter *fmt, ASTNode *node);
+
 static void format_call(Formatter *fmt, ASTNode *node);
+
 static void format_struct(Formatter *fmt, ASTNode *node);
+
 static void format_typedef(Formatter *fmt, ASTNode *node);
+
 static void format_enum(Formatter *fmt, ASTNode *node);
 
 /* Output helpers */
 static void emit(Formatter *fmt, const char *str);
+
 static void emit_char(Formatter *fmt, char c);
+
 static void emit_newline(Formatter *fmt);
+
 static void emit_indent(Formatter *fmt);
+
 static void emit_space(Formatter *fmt);
 
 /*
@@ -43,11 +66,9 @@ Formatter *formatter_create(FILE *output)
 
 	if (!output)
 		return (NULL);
-
 	formatter = malloc(sizeof(Formatter));
 	if (!formatter)
 		return (NULL);
-
 	formatter->output = output;
 	formatter->indent_level = 0;
 	formatter->column = 0;
@@ -70,7 +91,6 @@ void formatter_destroy(Formatter *formatter)
 {
 	if (!formatter)
 		return;
-
 	free(formatter);
 }
 
@@ -85,45 +105,39 @@ int formatter_format(Formatter *formatter, ASTNode *ast)
 {
 	if (!formatter || !ast)
 		return (-1);
-
 	format_node(formatter, ast);
-
-	return (0);
+	return ((0));
 }
 
 /*
  * Output helpers
  */
-
 static void emit(Formatter *fmt, const char *str)
 {
 	if (!str)
 		return;
-
 	while (*str)
 	{
 		emit_char(fmt, *str);
-		str++;
+		++str;
 	}
 }
 
 static void emit_char(Formatter *fmt, char c)
 {
 	fputc(c, fmt->output);
-
 	if (c == '\n')
 	{
 		fmt->column = 0;
-		fmt->line++;
+		++fmt->line;
 		fmt->at_line_start = 1;
 	}
 	else
 	{
 		if (c == '\t')
-			fmt->column += fmt->indent_width -
-				(fmt->column % fmt->indent_width);
+			fmt->column += fmt->indent_width - fmt->column % fmt->indent_width;
 		else
-			fmt->column++;
+			++fmt->column;
 		fmt->at_line_start = 0;
 	}
 }
@@ -137,7 +151,7 @@ static void emit_indent(Formatter *fmt)
 {
 	int i;
 
-	for (i = 0; i < fmt->indent_level; i++)
+	for (i = 0; i < fmt->indent_level; ++i)
 	{
 		if (fmt->use_tabs)
 			emit_char(fmt, '\t');
@@ -145,7 +159,7 @@ static void emit_indent(Formatter *fmt)
 		{
 			int j;
 
-			for (j = 0; j < fmt->indent_width; j++)
+			for (j = 0; j < fmt->indent_width; ++j)
 				emit_char(fmt, ' ');
 		}
 	}
@@ -169,13 +183,11 @@ static void format_comment(Formatter *fmt, Token *comment, int inline_comment)
 
 	if (!comment || !comment->lexeme)
 		return;
-
 	text = comment->lexeme;
 	len = strlen(text);
 
 	if (!inline_comment && !fmt->at_line_start)
 		emit_newline(fmt);
-
 	if (!inline_comment)
 		emit_indent(fmt);
 	else
@@ -186,7 +198,7 @@ static void format_comment(Formatter *fmt, Token *comment, int inline_comment)
 	{
 		/* Convert C99 to C89 style */
 		emit(fmt, "/*");
-		emit(fmt, text + 2);  /* Skip the // */
+		emit(fmt, text + 2); /* Skip the // */
 		emit(fmt, " */");
 	}
 	else
@@ -208,11 +220,9 @@ static void emit_leading_comments(Formatter *fmt, ASTNode *node)
 {
 	int i;
 
-	if (!node || node->type == NODE_UNPARSED ||
-	    node->leading_comment_count == 0)
+	if (!node || node->type == NODE_UNPARSED || node->leading_comment_count == 0)
 		return;
-
-	for (i = 0; i < node->leading_comment_count; i++)
+	for (i = 0; i < node->leading_comment_count; ++i)
 		format_comment(fmt, node->leading_comments[i], 0);
 }
 
@@ -227,23 +237,19 @@ static void emit_trailing_comments(Formatter *fmt, ASTNode *node)
 {
 	int i;
 
-	if (!node || node->type == NODE_UNPARSED ||
-	    node->trailing_comment_count == 0)
+	if (!node || node->type == NODE_UNPARSED || node->trailing_comment_count == 0)
 		return;
-
-	for (i = 0; i < node->trailing_comment_count; i++)
+	for (i = 0; i < node->trailing_comment_count; ++i)
 		format_comment(fmt, node->trailing_comments[i], 1);
 }
 
 /*
  * Node formatting dispatch
  */
-
 static void format_node(Formatter *fmt, ASTNode *node)
 {
 	if (!node)
 		return;
-
 	switch (node->type)
 	{
 	case NODE_PROGRAM:
@@ -309,7 +315,6 @@ static void format_node(Formatter *fmt, ASTNode *node)
 		format_enum(fmt, node);
 		break;
 	case NODE_PREPROCESSOR:
-		/* Output preprocessor directive verbatim */
 		if (node->token && node->token->lexeme)
 		{
 			emit(fmt, node->token->lexeme);
@@ -340,14 +345,13 @@ static void format_node(Formatter *fmt, ASTNode *node)
 /*
  * Program formatting
  */
-
 static void format_program(Formatter *fmt, ASTNode *node)
 {
 	int i;
-	NodeType prev_type = NODE_PROGRAM;  /* Initial sentinel */
+	NodeType prev_type = NODE_PROGRAM; /* Initial sentinel */
 	ASTNode *prev_child = NULL;
 
-	for (i = 0; i < node->child_count; i++)
+	for (i = 0; i < node->child_count; ++i)
 	{
 		ASTNode *child = node->children[i];
 		int need_blank = 0;
@@ -355,82 +359,56 @@ static void format_program(Formatter *fmt, ASTNode *node)
 		int curr_is_conditional_end = 0;
 
 		/* Check if previous was a conditional compilation start */
-		if (prev_child && prev_type == NODE_PREPROCESSOR &&
-		    prev_child->token && prev_child->token->lexeme)
+		/* Check if current is a conditional compilation end/else */
+		if (prev_child && prev_type == NODE_PREPROCESSOR && prev_child->token && prev_child->token->lexeme)
 		{
 			const char *lex = prev_child->token->lexeme;
-			if (strncmp(lex, "#ifdef", 6) == 0 ||
-			    strncmp(lex, "#ifndef", 7) == 0 ||
-			    strncmp(lex, "#if ", 4) == 0 ||
-			    strncmp(lex, "#if\t", 4) == 0 ||
-			    strncmp(lex, "#else", 5) == 0 ||
-			    strncmp(lex, "#elif", 5) == 0)
+
+			if (strncmp(lex, "#ifdef", 6) == 0 || strncmp(lex, "#ifndef", 7) == 0 || strncmp(lex, "#if ", 4) == 0 || strncmp(lex, "#if\t", 4) == 0 || strncmp(lex, "#else", 5) == 0 || strncmp(lex, "#elif", 5) == 0)
 				prev_is_conditional_start = 1;
 		}
-
-		/* Check if current is a conditional compilation end/else */
-		if (child->type == NODE_PREPROCESSOR &&
-		    child->token && child->token->lexeme)
+		/* Add blank lines for readability */
+		if (child->type == NODE_PREPROCESSOR && child->token && child->token->lexeme)
 		{
 			const char *lex = child->token->lexeme;
-			if (strncmp(lex, "#endif", 6) == 0 ||
-			    strncmp(lex, "#else", 5) == 0 ||
-			    strncmp(lex, "#elif", 5) == 0)
+
+			if (strncmp(lex, "#endif", 6) == 0 || strncmp(lex, "#else", 5) == 0 || strncmp(lex, "#elif", 5) == 0)
 				curr_is_conditional_end = 1;
 		}
-
-		/* Add blank lines for readability */
 		if (i > 0)
 		{
 			/* No blank line between consecutive preprocessor directives */
-			if (prev_type == NODE_PREPROCESSOR &&
-			    child->type == NODE_PREPROCESSOR)
+			if (prev_type == NODE_PREPROCESSOR && child->type == NODE_PREPROCESSOR)
 				need_blank = 0;
-			/* No blank line after #ifdef/#if/#else before code */
 			else if (prev_is_conditional_start)
 				need_blank = 0;
-			/* No blank line before #endif/#else/#elif after code */
 			else if (curr_is_conditional_end)
 				need_blank = 0;
-			/* Blank line after preprocessor block before code */
-			else if (prev_type == NODE_PREPROCESSOR &&
-				 child->type != NODE_PREPROCESSOR)
-				need_blank = 1;
-			/* Blank line before preprocessor if after code */
-			else if (child->type == NODE_PREPROCESSOR &&
-				 prev_type != NODE_PREPROCESSOR &&
-				 prev_type != NODE_PROGRAM)
-				need_blank = 1;
-			/* Blank line after functions */
-			else if (prev_type == NODE_FUNCTION)
-				need_blank = 1;
-			/* Blank line after struct/enum/typedef definitions */
-			else if (prev_type == NODE_STRUCT || prev_type == NODE_ENUM ||
-				 prev_type == NODE_TYPEDEF)
-				need_blank = 1;
-			/* Blank line after global variable declarations */
-			else if (prev_type == NODE_VAR_DECL || prev_type == NODE_FUNC_PTR)
-				need_blank = 1;
-			/* Blank line before a function if anything is above it */
-			else if (child->type == NODE_FUNCTION)
-				need_blank = 1;
-			/* Blank line before typedef/struct/enum if anything is above */
-			else if (child->type == NODE_TYPEDEF ||
-				 child->type == NODE_STRUCT ||
-				 child->type == NODE_ENUM)
-				need_blank = 1;
-			/* Preserve user-added blank line */
-			else if (child->blank_lines_before > 0)
-				need_blank = 1;
+			else
+				if (prev_type == NODE_PREPROCESSOR && child->type != NODE_PREPROCESSOR)
+					need_blank = 1;
+				else if (child->type == NODE_PREPROCESSOR && prev_type != NODE_PREPROCESSOR && prev_type != NODE_PROGRAM)
+					need_blank = 1;
+				else if (prev_type == NODE_FUNCTION)
+					need_blank = 1;
+				else
+					if (prev_type == NODE_STRUCT || prev_type == NODE_ENUM || prev_type == NODE_TYPEDEF)
+						need_blank = 1;
+					else if (prev_type == NODE_VAR_DECL || prev_type == NODE_FUNC_PTR)
+						need_blank = 1;
+					else if (child->type == NODE_FUNCTION)
+						need_blank = 1;
+					else
+						if (child->type == NODE_TYPEDEF || child->type == NODE_STRUCT || child->type == NODE_ENUM)
+							need_blank = 1;
+						else if (child->blank_lines_before > 0)
+							need_blank = 1;
 		}
-
 		if (child->type == NODE_UNPARSED)
 			need_blank = 0;
-
+		/* Output leading comments */
 		if (need_blank)
 			emit_newline(fmt);
-
-		/* Output leading comments */
 		emit_leading_comments(fmt, child);
 
 		format_node(fmt, child);
@@ -441,7 +419,6 @@ static void format_program(Formatter *fmt, ASTNode *node)
 			emit(fmt, ";");
 			emit_newline(fmt);
 		}
-
 		prev_type = child->type;
 		prev_child = child;
 	}
@@ -459,14 +436,11 @@ static void format_unparsed(Formatter *fmt, ASTNode *node)
 
 	if (!fmt || !node || !node->data)
 		return;
-
 	segment = (RawSegmentData *)node->data;
 	if (!segment->text)
 		return;
-
 	if (!fmt->at_line_start)
 		emit_newline(fmt);
-
 	emit(fmt, segment->text);
 	len = strlen(segment->text);
 	if (len == 0 || segment->text[len - 1] != '\n')
@@ -476,22 +450,21 @@ static void format_unparsed(Formatter *fmt, ASTNode *node)
 /*
  * Function formatting - Betty style
  */
-
 static void format_function(Formatter *fmt, ASTNode *node)
 {
 	Token *name_token = node->token;
 	FunctionData *func_data = (FunctionData *)node->data;
 	int i;
 
+	/* Output return type */
 	if (!name_token)
 		return;
-
-	/* Output return type */
+	/* Function name (same line as return type) */
 	if (func_data && func_data->return_type_count > 0)
 	{
 		int last_was_star = 0;
 
-		for (i = 0; i < func_data->return_type_count; i++)
+		for (i = 0; i < func_data->return_type_count; ++i)
 		{
 			Token *tok = func_data->return_type_tokens[i];
 
@@ -511,19 +484,18 @@ static void format_function(Formatter *fmt, ASTNode *node)
 				last_was_star = 0;
 			}
 		}
+
 		/* Only add space if last token wasn't a pointer */
 		if (!last_was_star)
 			emit(fmt, " ");
 	}
-
-	/* Function name (same line as return type) */
 	emit(fmt, name_token->lexeme);
 	emit(fmt, "(");
 
 	/* Output parameters */
 	if (func_data && func_data->param_count > 0)
 	{
-		for (i = 0; i < func_data->param_count; i++)
+		for (i = 0; i < func_data->param_count; ++i)
 		{
 			ASTNode *param = func_data->params[i];
 			FunctionData *pdata = (FunctionData *)param->data;
@@ -531,20 +503,19 @@ static void format_function(Formatter *fmt, ASTNode *node)
 			int bracket_start = -1;
 			int last_was_star = 0;
 
+			/* Handle variadic parameter (...) */
 			if (i > 0)
 				emit(fmt, ", ");
-
-			/* Handle variadic parameter (...) */
+			/* Output parameter type (but not brackets) */
 			if (param->token && param->token->type == TOK_ELLIPSIS)
 			{
 				emit(fmt, "...");
 				continue;
 			}
-
-			/* Output parameter type (but not brackets) */
+			/* Output parameter name */
 			if (pdata && pdata->return_type_count > 0)
 			{
-				for (j = 0; j < pdata->return_type_count; j++)
+				for (j = 0; j < pdata->return_type_count; ++j)
 				{
 					Token *tok = pdata->return_type_tokens[j];
 
@@ -558,7 +529,7 @@ static void format_function(Formatter *fmt, ASTNode *node)
 					else if (tok->type == TOK_LBRACKET)
 					{
 						bracket_start = j;
-						break;  /* Stop here, output brackets after name */
+						break; /* Stop here, output brackets after name */
 					}
 					else
 					{
@@ -570,21 +541,17 @@ static void format_function(Formatter *fmt, ASTNode *node)
 					}
 				}
 			}
-
-			/* Output parameter name */
+			/* Output array brackets after name */
 			if (param->token)
 			{
 				/* No space after pointer, but space after type keyword */
-				if (pdata && pdata->return_type_count > 0 &&
-				    bracket_start != 0 && !last_was_star)
+				if (pdata && pdata->return_type_count > 0 && bracket_start != 0 && !last_was_star)
 					emit(fmt, " ");
 				emit(fmt, param->token->lexeme);
 			}
-
-			/* Output array brackets after name */
 			if (bracket_start >= 0 && pdata)
 			{
-				for (j = bracket_start; j < pdata->return_type_count; j++)
+				for (j = bracket_start; j < pdata->return_type_count; ++j)
 				{
 					Token *tok = pdata->return_type_tokens[j];
 
@@ -609,8 +576,7 @@ static void format_function(Formatter *fmt, ASTNode *node)
 		emit_newline(fmt);
 		emit(fmt, "{");
 		emit_newline(fmt);
-		fmt->indent_level++;
-
+		++fmt->indent_level;
 		if (node->children[0]->type == NODE_BLOCK)
 		{
 			ASTNode *block = node->children[0];
@@ -618,11 +584,10 @@ static void format_function(Formatter *fmt, ASTNode *node)
 			int had_var_decl = 0;
 			int added_blank = 0;
 
-			for (j = 0; j < block->child_count; j++)
+			for (j = 0; j < block->child_count; ++j)
 			{
 				ASTNode *stmt = block->children[j];
-				int is_var_decl = (stmt->type == NODE_VAR_DECL ||
-						   stmt->type == NODE_FUNC_PTR);
+				int is_var_decl = stmt->type == NODE_VAR_DECL || stmt->type == NODE_FUNC_PTR;
 				int need_blank = 0;
 
 				/* Add blank line when transitioning from decls to stmts */
@@ -631,21 +596,17 @@ static void format_function(Formatter *fmt, ASTNode *node)
 					need_blank = 1;
 					added_blank = 1;
 				}
-				/* Preserve user-added blank lines (after first decl->stmt transition) */
 				else if (added_blank && stmt->blank_lines_before > 0)
 				{
 					need_blank = 1;
 				}
-
+				/* Output leading comments for this statement */
 				if (need_blank)
 					emit_newline(fmt);
-
-				/* Output leading comments for this statement */
 				emit_leading_comments(fmt, stmt);
 
 				if (is_var_decl)
 					had_var_decl = 1;
-
 				format_node(fmt, stmt);
 			}
 		}
@@ -653,8 +614,7 @@ static void format_function(Formatter *fmt, ASTNode *node)
 		{
 			format_node(fmt, node->children[0]);
 		}
-
-		fmt->indent_level--;
+		--fmt->indent_level;
 		emit(fmt, "}");
 		emit_newline(fmt);
 	}
@@ -669,7 +629,6 @@ static void format_function(Formatter *fmt, ASTNode *node)
 /*
  * Block formatting
  */
-
 static void format_block(Formatter *fmt, ASTNode *node)
 {
 	int i;
@@ -681,13 +640,12 @@ static void format_block(Formatter *fmt, ASTNode *node)
 	emit(fmt, "{");
 	emit_newline(fmt);
 
-	fmt->indent_level++;
+	++fmt->indent_level;
 
-	for (i = 0; i < node->child_count; i++)
+	for (i = 0; i < node->child_count; ++i)
 	{
 		ASTNode *stmt = node->children[i];
-		int is_var_decl = (stmt->type == NODE_VAR_DECL ||
-				   stmt->type == NODE_FUNC_PTR);
+		int is_var_decl = stmt->type == NODE_VAR_DECL || stmt->type == NODE_FUNC_PTR;
 		int need_blank = 0;
 
 		/* Add blank line when transitioning from decls to stmts */
@@ -696,25 +654,21 @@ static void format_block(Formatter *fmt, ASTNode *node)
 			need_blank = 1;
 			added_blank = 1;
 		}
-		/* Preserve user-added blank lines */
 		else if (added_blank && stmt->blank_lines_before > 0)
 		{
 			need_blank = 1;
 		}
-
+		/* Output leading comments for this statement */
 		if (need_blank)
 			emit_newline(fmt);
-
-		/* Output leading comments for this statement */
 		emit_leading_comments(fmt, stmt);
 
 		if (is_var_decl)
 			had_var_decl = 1;
-
 		format_node(fmt, stmt);
 	}
 
-	fmt->indent_level--;
+	--fmt->indent_level;
 
 	emit_indent(fmt);
 	emit(fmt, "}");
@@ -724,7 +678,6 @@ static void format_block(Formatter *fmt, ASTNode *node)
 /*
  * Variable declaration formatting
  */
-
 /*
  * Helper to output a single variable declaration
  */
@@ -733,11 +686,10 @@ static void format_single_var(Formatter *fmt, VarDeclData *var_data)
 	int i;
 	int last_was_star = 0;
 
+	/* Output type tokens */
 	if (!var_data || var_data->type_count == 0)
 		return;
-
-	/* Output type tokens */
-	for (i = 0; i < var_data->type_count; i++)
+	for (i = 0; i < var_data->type_count; ++i)
 	{
 		Token *tok = var_data->type_tokens[i];
 
@@ -758,17 +710,17 @@ static void format_single_var(Formatter *fmt, VarDeclData *var_data)
 	}
 
 	/* Output variable name */
+	/* Output array brackets */
 	if (var_data->name_token)
 	{
 		if (!last_was_star)
 			emit(fmt, " ");
 		emit(fmt, var_data->name_token->lexeme);
 	}
-
-	/* Output array brackets */
+	/* Output initialization if present */
 	if (var_data->array_count > 0)
 	{
-		for (i = 0; i < var_data->array_count; i++)
+		for (i = 0; i < var_data->array_count; ++i)
 		{
 			Token *tok = var_data->array_tokens[i];
 
@@ -780,8 +732,6 @@ static void format_single_var(Formatter *fmt, VarDeclData *var_data)
 				emit(fmt, tok->lexeme);
 		}
 	}
-
-	/* Output initialization if present */
 	if (var_data->init_expr)
 	{
 		emit(fmt, " = ");
@@ -797,11 +747,10 @@ static void format_extra_var(Formatter *fmt, VarDeclData *var_data)
 	int i;
 	int has_ptr = 0;
 
+	/* Check if this var has pointers */
 	if (!var_data)
 		return;
-
-	/* Check if this var has pointers */
-	for (i = 0; i < var_data->type_count; i++)
+	for (i = 0; i < var_data->type_count; ++i)
 	{
 		if (var_data->type_tokens[i]->type == TOK_STAR)
 		{
@@ -811,13 +760,13 @@ static void format_extra_var(Formatter *fmt, VarDeclData *var_data)
 	}
 
 	/* Output variable name */
+	/* Output array brackets */
 	if (var_data->name_token)
 		emit(fmt, var_data->name_token->lexeme);
-
-	/* Output array brackets */
+	/* Output initialization if present */
 	if (var_data->array_count > 0)
 	{
-		for (i = 0; i < var_data->array_count; i++)
+		for (i = 0; i < var_data->array_count; ++i)
 		{
 			Token *tok = var_data->array_tokens[i];
 
@@ -829,14 +778,11 @@ static void format_extra_var(Formatter *fmt, VarDeclData *var_data)
 				emit(fmt, tok->lexeme);
 		}
 	}
-
-	/* Output initialization if present */
 	if (var_data->init_expr)
 	{
 		emit(fmt, " = ");
 		format_expression(fmt, var_data->init_expr);
 	}
-
 	(void)has_ptr;
 }
 
@@ -850,11 +796,10 @@ static void format_var_decl(Formatter *fmt, ASTNode *node)
 	if (var_data && var_data->type_count > 0)
 	{
 		format_single_var(fmt, var_data);
-
 		/* Output extra variables on same line with commas */
 		if (var_data->extra_count > 0)
 		{
-			for (i = 0; i < var_data->extra_count; i++)
+			for (i = 0; i < var_data->extra_count; ++i)
 			{
 				emit(fmt, ", ");
 				format_extra_var(fmt, var_data->extra_vars[i]);
@@ -894,7 +839,7 @@ static void emit_func_ptr_content(Formatter *fmt, FuncPtrData *fp_data)
 	int ends_with_ptr = 0;
 
 	/* Output return type tokens */
-	for (i = 0; i < fp_data->return_type_count; i++)
+	for (i = 0; i < fp_data->return_type_count; ++i)
 	{
 		Token *tok = fp_data->return_type_tokens[i];
 
@@ -923,7 +868,7 @@ static void emit_func_ptr_content(Formatter *fmt, FuncPtrData *fp_data)
 
 	/* Output parameter tokens */
 	need_space = 0;
-	for (i = 0; i < fp_data->param_count; i++)
+	for (i = 0; i < fp_data->param_count; ++i)
 	{
 		Token *tok = fp_data->param_tokens[i];
 
@@ -959,7 +904,6 @@ static void format_func_ptr(Formatter *fmt, ASTNode *node)
 
 	if (fp_data)
 		emit_func_ptr_content(fmt, fp_data);
-
 	emit(fmt, ";");
 	emit_newline(fmt);
 }
@@ -967,17 +911,13 @@ static void format_func_ptr(Formatter *fmt, ASTNode *node)
 /*
  * If statement formatting - Betty style
  */
-
 static void format_if(Formatter *fmt, ASTNode *node)
 {
 	emit_indent(fmt);
 	emit(fmt, "if (");
-
 	if (node->child_count > 0)
 		format_expression(fmt, node->children[0]);
-
 	emit(fmt, ")");
-
 	if (node->child_count > 1)
 	{
 		ASTNode *then_branch = node->children[1];
@@ -989,12 +929,11 @@ static void format_if(Formatter *fmt, ASTNode *node)
 		else
 		{
 			emit_newline(fmt);
-			fmt->indent_level++;
+			++fmt->indent_level;
 			format_node(fmt, then_branch);
-			fmt->indent_level--;
+			--fmt->indent_level;
 		}
 	}
-
 	if (node->child_count > 2)
 	{
 		ASTNode *else_branch = node->children[2];
@@ -1010,7 +949,7 @@ static void format_if(Formatter *fmt, ASTNode *node)
 			if (else_branch->child_count > 0)
 				format_expression(fmt, else_branch->children[0]);
 			emit(fmt, ")");
-
+			/* Recursively handle nested else/else-if */
 			if (else_branch->child_count > 1)
 			{
 				if (else_branch->children[1]->type == NODE_BLOCK)
@@ -1018,13 +957,11 @@ static void format_if(Formatter *fmt, ASTNode *node)
 				else
 				{
 					emit_newline(fmt);
-					fmt->indent_level++;
+					++fmt->indent_level;
 					format_node(fmt, else_branch->children[1]);
-					fmt->indent_level--;
+					--fmt->indent_level;
 				}
 			}
-
-			/* Recursively handle nested else/else-if */
 			if (else_branch->child_count > 2)
 			{
 				ASTNode *nested_else = else_branch->children[2];
@@ -1041,6 +978,7 @@ static void format_if(Formatter *fmt, ASTNode *node)
 					if (nested_else->child_count > 0)
 						format_expression(fmt, nested_else->children[0]);
 					emit(fmt, ")");
+					/* Handle deeper nesting if needed */
 					if (nested_else->child_count > 1)
 					{
 						if (nested_else->children[1]->type == NODE_BLOCK)
@@ -1048,12 +986,11 @@ static void format_if(Formatter *fmt, ASTNode *node)
 						else
 						{
 							emit_newline(fmt);
-							fmt->indent_level++;
+							++fmt->indent_level;
 							format_node(fmt, nested_else->children[1]);
-							fmt->indent_level--;
+							--fmt->indent_level;
 						}
 					}
-					/* Handle deeper nesting if needed */
 					if (nested_else->child_count > 2)
 					{
 						/* Just format the else branch directly */
@@ -1064,9 +1001,9 @@ static void format_if(Formatter *fmt, ASTNode *node)
 						else
 						{
 							emit_newline(fmt);
-							fmt->indent_level++;
+							++fmt->indent_level;
 							format_node(fmt, nested_else->children[2]);
-							fmt->indent_level--;
+							--fmt->indent_level;
 						}
 					}
 				}
@@ -1077,9 +1014,9 @@ static void format_if(Formatter *fmt, ASTNode *node)
 				else
 				{
 					emit_newline(fmt);
-					fmt->indent_level++;
+					++fmt->indent_level;
 					format_node(fmt, nested_else);
-					fmt->indent_level--;
+					--fmt->indent_level;
 				}
 			}
 		}
@@ -1090,9 +1027,9 @@ static void format_if(Formatter *fmt, ASTNode *node)
 		else
 		{
 			emit_newline(fmt);
-			fmt->indent_level++;
+			++fmt->indent_level;
 			format_node(fmt, else_branch);
-			fmt->indent_level--;
+			--fmt->indent_level;
 		}
 	}
 }
@@ -1100,17 +1037,13 @@ static void format_if(Formatter *fmt, ASTNode *node)
 /*
  * While statement formatting
  */
-
 static void format_while(Formatter *fmt, ASTNode *node)
 {
 	emit_indent(fmt);
 	emit(fmt, "while (");
-
 	if (node->child_count > 0)
 		format_expression(fmt, node->children[0]);
-
 	emit(fmt, ")");
-
 	if (node->child_count > 1)
 	{
 		if (node->children[1]->type == NODE_BLOCK)
@@ -1118,9 +1051,9 @@ static void format_while(Formatter *fmt, ASTNode *node)
 		else
 		{
 			emit_newline(fmt);
-			fmt->indent_level++;
+			++fmt->indent_level;
 			format_node(fmt, node->children[1]);
-			fmt->indent_level--;
+			--fmt->indent_level;
 		}
 	}
 }
@@ -1128,24 +1061,19 @@ static void format_while(Formatter *fmt, ASTNode *node)
 /*
  * For statement formatting
  */
-
 static void format_for(Formatter *fmt, ASTNode *node)
 {
 	emit_indent(fmt);
 	emit(fmt, "for (");
-
 	if (node->child_count > 0 && node->children[0])
 		format_expression(fmt, node->children[0]);
 	emit(fmt, "; ");
-
 	if (node->child_count > 1 && node->children[1])
 		format_expression(fmt, node->children[1]);
 	emit(fmt, "; ");
-
 	if (node->child_count > 2 && node->children[2])
 		format_expression(fmt, node->children[2]);
 	emit(fmt, ")");
-
 	if (node->child_count > 3)
 	{
 		if (node->children[3]->type == NODE_BLOCK)
@@ -1153,9 +1081,9 @@ static void format_for(Formatter *fmt, ASTNode *node)
 		else
 		{
 			emit_newline(fmt);
-			fmt->indent_level++;
+			++fmt->indent_level;
 			format_node(fmt, node->children[3]);
-			fmt->indent_level--;
+			--fmt->indent_level;
 		}
 	}
 }
@@ -1163,12 +1091,10 @@ static void format_for(Formatter *fmt, ASTNode *node)
 /*
  * Do-while statement formatting
  */
-
 static void format_do_while(Formatter *fmt, ASTNode *node)
 {
 	emit_indent(fmt);
 	emit(fmt, "do");
-
 	if (node->child_count > 0)
 	{
 		if (node->children[0]->type == NODE_BLOCK)
@@ -1176,18 +1102,15 @@ static void format_do_while(Formatter *fmt, ASTNode *node)
 		else
 		{
 			emit_newline(fmt);
-			fmt->indent_level++;
+			++fmt->indent_level;
 			format_node(fmt, node->children[0]);
-			fmt->indent_level--;
+			--fmt->indent_level;
 		}
 	}
-
 	emit_indent(fmt);
 	emit(fmt, "while (");
-
 	if (node->child_count > 1)
 		format_expression(fmt, node->children[1]);
-
 	emit(fmt, ");");
 	emit_newline(fmt);
 }
@@ -1195,7 +1118,6 @@ static void format_do_while(Formatter *fmt, ASTNode *node)
 /*
  * Switch statement formatting
  */
-
 static void format_switch(Formatter *fmt, ASTNode *node)
 {
 	int i;
@@ -1205,14 +1127,13 @@ static void format_switch(Formatter *fmt, ASTNode *node)
 
 	if (node->child_count > 0)
 		format_expression(fmt, node->children[0]);
-
 	emit(fmt, ")");
 	emit_newline(fmt);
 	emit_indent(fmt);
 	emit(fmt, "{");
 	emit_newline(fmt);
 
-	for (i = 1; i < node->child_count; i++)
+	for (i = 1; i < node->child_count; ++i)
 	{
 		ASTNode *case_node = node->children[i];
 
@@ -1223,8 +1144,7 @@ static void format_switch(Formatter *fmt, ASTNode *node)
 			emit_indent(fmt);
 
 			/* Check if it's 'case' or 'default' by token type */
-			if (case_node->token &&
-			    case_node->token->type == TOK_DEFAULT)
+			if (case_node->token && case_node->token->type == TOK_DEFAULT)
 			{
 				emit(fmt, "default:");
 				stmt_start = 0;
@@ -1243,14 +1163,15 @@ static void format_switch(Formatter *fmt, ASTNode *node)
 			emit_newline(fmt);
 
 			/* Format case body statements */
-			fmt->indent_level++;
+			++fmt->indent_level;
+
 			{
 				int j;
 
-				for (j = stmt_start; j < case_node->child_count; j++)
+				for (j = stmt_start; j < case_node->child_count; ++j)
 					format_node(fmt, case_node->children[j]);
 			}
-			fmt->indent_level--;
+			--fmt->indent_level;
 		}
 	}
 
@@ -1262,19 +1183,16 @@ static void format_switch(Formatter *fmt, ASTNode *node)
 /*
  * Return statement formatting - Betty requires parentheses
  */
-
 static void format_return(Formatter *fmt, ASTNode *node)
 {
 	emit_indent(fmt);
 	emit(fmt, "return");
-
 	if (node->child_count > 0)
 	{
 		emit(fmt, " (");
 		format_expression(fmt, node->children[0]);
 		emit(fmt, ")");
 	}
-
 	emit(fmt, ";");
 	emit_trailing_comments(fmt, node);
 	emit_newline(fmt);
@@ -1283,38 +1201,31 @@ static void format_return(Formatter *fmt, ASTNode *node)
 /*
  * Expression formatting
  */
-
 static void format_expression(Formatter *fmt, ASTNode *node)
 {
 	int i;
 
 	if (!node)
 		return;
-
 	switch (node->type)
 	{
 	case NODE_LITERAL:
 		if (node->token && node->token->lexeme)
 			emit(fmt, node->token->lexeme);
 		break;
-
 	case NODE_IDENTIFIER:
 		if (node->token && node->token->lexeme)
 			emit(fmt, node->token->lexeme);
 		break;
-
 	case NODE_BINARY:
 		format_binary(fmt, node);
 		break;
-
 	case NODE_UNARY:
 		format_unary(fmt, node);
 		break;
-
 	case NODE_CALL:
 		format_call(fmt, node);
 		break;
-
 	case NODE_MEMBER_ACCESS:
 		if (node->child_count > 0)
 			format_expression(fmt, node->children[0]);
@@ -1324,7 +1235,6 @@ static void format_expression(Formatter *fmt, ASTNode *node)
 			emit(fmt, node->token->lexeme);
 		}
 		break;
-
 	case NODE_ARRAY_ACCESS:
 		if (node->child_count > 0)
 			format_expression(fmt, node->children[0]);
@@ -1333,7 +1243,6 @@ static void format_expression(Formatter *fmt, ASTNode *node)
 			format_expression(fmt, node->children[1]);
 		emit(fmt, "]");
 		break;
-
 	case NODE_CAST:
 		emit(fmt, "(");
 		if (node->data)
@@ -1344,7 +1253,6 @@ static void format_expression(Formatter *fmt, ASTNode *node)
 		if (node->child_count > 0)
 			format_expression(fmt, node->children[0]);
 		break;
-
 	case NODE_SIZEOF:
 		emit(fmt, "sizeof(");
 		if (node->child_count > 0)
@@ -1359,7 +1267,6 @@ static void format_expression(Formatter *fmt, ASTNode *node)
 		}
 		emit(fmt, ")");
 		break;
-
 	case NODE_TERNARY:
 		if (node->child_count > 0)
 			format_expression(fmt, node->children[0]);
@@ -1370,10 +1277,9 @@ static void format_expression(Formatter *fmt, ASTNode *node)
 		if (node->child_count > 2)
 			format_expression(fmt, node->children[2]);
 		break;
-
 	case NODE_INIT_LIST:
 		emit(fmt, "{");
-		for (i = 0; i < node->child_count; i++)
+		for (i = 0; i < node->child_count; ++i)
 		{
 			if (i > 0)
 				emit(fmt, ", ");
@@ -1381,16 +1287,14 @@ static void format_expression(Formatter *fmt, ASTNode *node)
 		}
 		emit(fmt, "}");
 		break;
-
 	case NODE_TYPE_EXPR:
-		/* Type used as expression (e.g., va_arg second argument) */
 		if (node->data)
 		{
 			FunctionData *type_data = (FunctionData *)node->data;
 			int j;
 			int last_was_star = 0;
 
-			for (j = 0; j < type_data->return_type_count; j++)
+			for (j = 0; j < type_data->return_type_count; ++j)
 			{
 				Token *tok = type_data->return_type_tokens[j];
 
@@ -1415,7 +1319,6 @@ static void format_expression(Formatter *fmt, ASTNode *node)
 			emit(fmt, node->token->lexeme);
 		}
 		break;
-
 	default:
 		break;
 	}
@@ -1424,17 +1327,14 @@ static void format_expression(Formatter *fmt, ASTNode *node)
 /*
  * Binary expression formatting
  */
-
 static void format_binary(Formatter *fmt, ASTNode *node)
 {
 	const char *op = "";
 
 	if (node->token && node->token->lexeme)
 		op = node->token->lexeme;
-
 	if (node->child_count > 0)
 		format_expression(fmt, node->children[0]);
-
 	emit_space(fmt);
 	emit(fmt, op);
 	emit_space(fmt);
@@ -1446,14 +1346,12 @@ static void format_binary(Formatter *fmt, ASTNode *node)
 /*
  * Unary expression formatting
  */
-
 static void format_unary(Formatter *fmt, ASTNode *node)
 {
 	const char *op = "";
 
 	if (node->token && node->token->lexeme)
 		op = node->token->lexeme;
-
 	emit(fmt, op);
 	if (node->child_count > 0)
 		format_expression(fmt, node->children[0]);
@@ -1462,7 +1360,6 @@ static void format_unary(Formatter *fmt, ASTNode *node)
 /*
  * Function call formatting
  */
-
 static void format_call(Formatter *fmt, ASTNode *node)
 {
 	int i;
@@ -1477,10 +1374,9 @@ static void format_call(Formatter *fmt, ASTNode *node)
 		format_expression(fmt, node->children[0]);
 		arg_start = 1;
 	}
-
 	emit(fmt, "(");
 
-	for (i = arg_start; i < node->child_count; i++)
+	for (i = arg_start; i < node->child_count; ++i)
 	{
 		if (i > arg_start)
 			emit(fmt, ", ");
@@ -1493,33 +1389,29 @@ static void format_call(Formatter *fmt, ASTNode *node)
 /*
  * Struct formatting
  */
-
 static void format_struct(Formatter *fmt, ASTNode *node)
 {
 	int i;
 
 	emit(fmt, "struct");
 
+	/* If struct has members (body), format them */
 	if (node->token && node->token->lexeme)
 	{
 		emit_space(fmt);
 		emit(fmt, node->token->lexeme);
 	}
-
-	/* If struct has members (body), format them */
 	if (node->child_count > 0)
 	{
 		emit_newline(fmt);
 		emit(fmt, "{");
 		emit_newline(fmt);
-		fmt->indent_level++;
-
-		for (i = 0; i < node->child_count; i++)
+		++fmt->indent_level;
+		for (i = 0; i < node->child_count; ++i)
 		{
 			format_node(fmt, node->children[i]);
 		}
-
-		fmt->indent_level--;
+		--fmt->indent_level;
 		emit_indent(fmt);
 		emit(fmt, "}");
 	}
@@ -1528,7 +1420,6 @@ static void format_struct(Formatter *fmt, ASTNode *node)
 /*
  * Typedef formatting
  */
-
 static void format_typedef(Formatter *fmt, ASTNode *node)
 {
 	int i;
@@ -1548,20 +1439,18 @@ static void format_typedef(Formatter *fmt, ASTNode *node)
 		emit_newline(fmt);
 		return;
 	}
-	/* If has struct/enum child, format it */
 	else if (node->child_count > 0)
 		format_node(fmt, node->children[0]);
 	else if (td_data && td_data->base_type_count > 0)
 	{
 		/* Check if we have a pointer */
-		for (i = 0; i < td_data->base_type_count; i++)
+		for (i = 0; i < td_data->base_type_count; ++i)
 		{
 			if (td_data->base_type_tokens[i]->type == TOK_STAR)
 				has_ptr = 1;
 		}
-
 		/* Output base type tokens for simple typedef */
-		for (i = 0; i < td_data->base_type_count; i++)
+		for (i = 0; i < td_data->base_type_count; ++i)
 		{
 			Token *tok = td_data->base_type_tokens[i];
 
@@ -1577,7 +1466,6 @@ static void format_typedef(Formatter *fmt, ASTNode *node)
 			}
 		}
 	}
-
 	if (node->token && node->token->lexeme)
 	{
 		/* Add space before alias unless we just emitted a pointer */
@@ -1585,7 +1473,6 @@ static void format_typedef(Formatter *fmt, ASTNode *node)
 			emit_space(fmt);
 		emit(fmt, node->token->lexeme);
 	}
-
 	emit(fmt, ";");
 	emit_newline(fmt);
 }
@@ -1593,52 +1480,44 @@ static void format_typedef(Formatter *fmt, ASTNode *node)
 /*
  * Enum formatting
  */
-
 static void format_enum(Formatter *fmt, ASTNode *node)
 {
 	int i;
 
 	emit(fmt, "enum");
 
+	/* If enum has values, format them */
 	if (node->token && node->token->lexeme)
 	{
 		emit_space(fmt);
 		emit(fmt, node->token->lexeme);
 	}
-
-	/* If enum has values, format them */
 	if (node->child_count > 0)
 	{
 		emit_newline(fmt);
 		emit(fmt, "{");
 		emit_newline(fmt);
-		fmt->indent_level++;
-
-		for (i = 0; i < node->child_count; i++)
+		++fmt->indent_level;
+		for (i = 0; i < node->child_count; ++i)
 		{
 			emit_indent(fmt);
 			/* Emit enum value name */
+			/* If it has an initializer value */
 			if (node->children[i]->token && node->children[i]->token->lexeme)
 			{
 				emit(fmt, node->children[i]->token->lexeme);
 			}
-
-			/* If it has an initializer value */
-			if (node->children[i]->child_count > 0 && 
-			    node->children[i]->children[0]->token &&
-			    node->children[i]->children[0]->token->lexeme)
+			/* Add comma except for last element */
+			if (node->children[i]->child_count > 0 && node->children[i]->children[0]->token && node->children[i]->children[0]->token->lexeme)
 			{
 				emit(fmt, " = ");
 				emit(fmt, node->children[i]->children[0]->token->lexeme);
 			}
-
-			/* Add comma except for last element */
 			if (i < node->child_count - 1)
 				emit(fmt, ",");
 			emit_newline(fmt);
 		}
-
-		fmt->indent_level--;
+		--fmt->indent_level;
 		emit_indent(fmt);
 		emit(fmt, "}");
 	}

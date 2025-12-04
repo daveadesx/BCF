@@ -41,8 +41,16 @@ typedef enum {
 	NODE_INIT_LIST,
 	NODE_FUNC_PTR,
 	NODE_TYPE_EXPR,  /* Type used as expression (e.g., in va_arg) */
-	NODE_PREPROCESSOR  /* Preprocessor directive (#include, #define, etc.) */
+	NODE_PREPROCESSOR,  /* Preprocessor directive (#include, #define, etc.) */
+	NODE_UNPARSED      /* Raw source preserved when parsing fails */
 } NodeType;
+
+/* Raw segment data for unparsed source regions */
+typedef struct RawSegmentData {
+	char *text;
+	int start_line;
+	int end_line;
+} RawSegmentData;
 
 /*
  * Function signature data

@@ -6,44 +6,79 @@
 
 /* Forward declarations */
 static Token *peek(Parser *parser);
+
 static Token *advance(Parser *parser);
+
 static int match(Parser *parser, TokenType type);
+
 static Token *expect(Parser *parser, TokenType type);
+
 static int skip_whitespace(Parser *parser);
+
 static int is_at_end(Parser *parser);
 
 static ASTNode *parse_program(Parser *parser);
+
 static ASTNode *parse_function(Parser *parser);
+
 static ASTNode *parse_statement(Parser *parser);
+
 static ASTNode *parse_block(Parser *parser);
+
 static ASTNode *parse_expression(Parser *parser);
+
 static ASTNode *parse_expression_precedence(Parser *parser, int min_precedence);
+
 static ASTNode *parse_primary(Parser *parser);
+
 static ASTNode *parse_postfix(Parser *parser);
+
 static ASTNode *parse_unary(Parser *parser);
+
 static ASTNode *parse_if_statement(Parser *parser);
+
 static ASTNode *parse_while_statement(Parser *parser);
+
 static ASTNode *parse_for_statement(Parser *parser);
+
 static ASTNode *parse_switch_statement(Parser *parser);
+
 static ASTNode *parse_do_while_statement(Parser *parser);
+
 static ASTNode *parse_var_declaration(Parser *parser);
+
 static ASTNode *parse_struct_definition(Parser *parser);
+
 static ASTNode *parse_typedef(Parser *parser);
+
 static ASTNode *parse_enum_definition(Parser *parser);
+
 static ASTNode *parse_union_definition(Parser *parser);
+
 static ASTNode *create_unparsed_node(Parser *parser, int start_index, int end_index);
+
 static ASTNode *recover_top_level(Parser *parser, int start_index);
+
 static ASTNode *recover_statement(Parser *parser, int start_index);
-static int looks_like_type_in_parens(Parser *parser, int start_index,
-	int *closing_index);
+
+static int looks_like_type_in_parens(Parser *parser, int start_index, int *closing_index);
+
 static void skip_gnu_attributes(Parser *parser);
+
 static void clear_pending_comments(Parser *parser);
+
 static void add_unparsed_child(Parser *parser, ASTNode *parent, int start_index);
+
 static char *copy_token_text(Parser *parser, int start_index, int end_index);
+
 static int token_allowed_in_type(Token *token);
+
 static int get_precedence(TokenType type);
+
 static int is_binary_operator(TokenType type);
+
 static int is_unary_operator(TokenType type);
+
 static int is_type_keyword(TokenType type);
 
 /*
@@ -59,11 +94,9 @@ Parser *parser_create(Token **tokens, int token_count)
 
 	if (!tokens || token_count <= 0)
 		return (NULL);
-
 	parser = malloc(sizeof(Parser));
 	if (!parser)
 		return (NULL);
-
 	parser->tokens = tokens;
 	parser->token_count = token_count;
 	parser->current = 0;
@@ -72,6 +105,7 @@ Parser *parser_create(Token **tokens, int token_count)
 	parser->symbols = symbol_table_create(NULL);
 
 	/* Add common C library typedefs */
+	/* Initialize comment buffer */
 	if (parser->symbols)
 	{
 		symbol_add(parser->symbols, "size_t", SYM_TYPEDEF);
@@ -113,8 +147,6 @@ Parser *parser_create(Token **tokens, int token_count)
 		symbol_add(parser->symbols, "Symbol", SYM_TYPEDEF);
 		symbol_add(parser->symbols, "NodeType", SYM_TYPEDEF);
 	}
-
-	/* Initialize comment buffer */
 	parser->pending_comments = NULL;
 	parser->pending_comment_count = 0;
 	parser->pending_comment_capacity = 0;
@@ -130,10 +162,8 @@ void parser_destroy(Parser *parser)
 {
 	if (!parser)
 		return;
-
 	if (parser->symbols)
 		symbol_table_destroy(parser->symbols);
-
 	free(parser->pending_comments);
 	free(parser);
 }
@@ -141,7 +171,6 @@ void parser_destroy(Parser *parser)
 /*
  * Helper functions for parser
  */
-
 /*
  * is_at_end - Check if at end of token stream
  * @parser: Parser instance
@@ -150,8 +179,7 @@ void parser_destroy(Parser *parser)
  */
 static int is_at_end(Parser *parser)
 {
-	return (parser->current >= parser->token_count ||
-		parser->tokens[parser->current]->type == TOK_EOF);
+	return (parser->current >= parser->token_count || parser->tokens[parser->current]->type == TOK_EOF);
 }
 
 /*
@@ -170,14 +198,13 @@ static Token *peek_ahead(Parser *parser, int n)
 	{
 		Token *t = parser->tokens[pos];
 
-		if (t->type != TOK_WHITESPACE && t->type != TOK_NEWLINE &&
-		    t->type != TOK_COMMENT_LINE && t->type != TOK_COMMENT_BLOCK)
+		if (t->type != TOK_WHITESPACE && t->type != TOK_NEWLINE && t->type != TOK_COMMENT_LINE && t->type != TOK_COMMENT_BLOCK)
 		{
 			if (count == n)
 				return (t);
-			count++;
+			++count;
 		}
-		pos++;
+		++pos;
 	}
 	return (NULL);
 }
@@ -196,20 +223,14 @@ static int looks_like_ptr_declaration(Parser *parser)
 	Token *t2 = peek_ahead(parser, 2);
 	Token *t3 = peek_ahead(parser, 3);
 
-	if (!t0 || !t1 || !t2)
-		return (0);
-
 	/* Pattern: IDENTIFIER * IDENTIFIER (;|,|=|[) */
-	if (t0->type == TOK_IDENTIFIER &&
-	    t1->type == TOK_STAR &&
-	    t2->type == TOK_IDENTIFIER &&
-	    t3 && (t3->type == TOK_SEMICOLON || t3->type == TOK_COMMA ||
-		   t3->type == TOK_ASSIGN || t3->type == TOK_LBRACKET))
+	if (!t0 || !t1 || !t2)
+		return ((0));
+	if (t0->type == TOK_IDENTIFIER && t1->type == TOK_STAR && t2->type == TOK_IDENTIFIER && t3 && t3->type == TOK_SEMICOLON || t3->type == TOK_COMMA || t3->type == TOK_ASSIGN || t3->type == TOK_LBRACKET)
 	{
-		return (1);
+		return ((1));
 	}
-
-	return (0);
+	return ((0));
 }
 
 /*
@@ -248,8 +269,7 @@ static ASTNode *create_unparsed_node(Parser *parser, int start_index, int end_in
 		end_index = parser->token_count;
 	if (start_index >= end_index)
 		return (NULL);
-
-	for (i = start_index; i < end_index; i++)
+	for (i = start_index; i < end_index; ++i)
 	{
 		Token *t = parser->tokens[i];
 
@@ -260,9 +280,8 @@ static ASTNode *create_unparsed_node(Parser *parser, int start_index, int end_in
 	buffer = malloc(total + 1);
 	if (!buffer)
 		return (NULL);
-
 	cursor = buffer;
-	for (i = start_index; i < end_index; i++)
+	for (i = start_index; i < end_index; ++i)
 	{
 		Token *t = parser->tokens[i];
 		size_t len;
@@ -281,12 +300,9 @@ static ASTNode *create_unparsed_node(Parser *parser, int start_index, int end_in
 		free(buffer);
 		return (NULL);
 	}
-
 	segment->text = buffer;
-	segment->start_line = parser->tokens[start_index] ?
-		parser->tokens[start_index]->line : 0;
-	segment->end_line = parser->tokens[end_index - 1] ?
-		parser->tokens[end_index - 1]->line : segment->start_line;
+	segment->start_line = parser->tokens[start_index] ? parser->tokens[start_index]->line : 0;
+	segment->end_line = parser->tokens[end_index - 1] ? parser->tokens[end_index - 1]->line : segment->start_line;
 
 	start_token = parser->tokens[start_index];
 	node = ast_node_create(NODE_UNPARSED, start_token);
@@ -296,7 +312,6 @@ static ASTNode *create_unparsed_node(Parser *parser, int start_index, int end_in
 		free(segment);
 		return (NULL);
 	}
-
 	node->data = segment;
 	return (node);
 }
@@ -317,13 +332,11 @@ static ASTNode *recover_top_level(Parser *parser, int start_index)
 		return (NULL);
 	if (start_index < 0 || start_index >= parser->token_count)
 		start_index = parser->current;
-
 	while (!is_at_end(parser))
 	{
 		t = peek(parser);
 		if (!t)
 			break;
-
 		if (t->type == TOK_SEMICOLON && brace_depth == 0)
 		{
 			advance(parser);
@@ -331,7 +344,7 @@ static ASTNode *recover_top_level(Parser *parser, int start_index)
 		}
 		if (t->type == TOK_LBRACE)
 		{
-			brace_depth++;
+			++brace_depth;
 			advance(parser);
 			continue;
 		}
@@ -342,19 +355,17 @@ static ASTNode *recover_top_level(Parser *parser, int start_index)
 				advance(parser);
 				break;
 			}
-			brace_depth--;
+			--brace_depth;
 			advance(parser);
 			if (brace_depth == 0)
 				break;
 			continue;
 		}
-
 		advance(parser);
 	}
 
 	if (parser->current <= start_index && !is_at_end(parser))
 		advance(parser);
-
 	return (create_unparsed_node(parser, start_index, parser->current));
 }
 
@@ -374,13 +385,11 @@ static ASTNode *recover_statement(Parser *parser, int start_index)
 		return (NULL);
 	if (start_index < 0 || start_index >= parser->token_count)
 		start_index = parser->current;
-
 	while (!is_at_end(parser))
 	{
 		t = peek(parser);
 		if (!t)
 			break;
-
 		if (t->type == TOK_SEMICOLON && brace_depth == 0)
 		{
 			advance(parser);
@@ -393,7 +402,7 @@ static ASTNode *recover_statement(Parser *parser, int start_index)
 		}
 		if (t->type == TOK_LBRACE)
 		{
-			brace_depth++;
+			++brace_depth;
 			advance(parser);
 			continue;
 		}
@@ -401,19 +410,17 @@ static ASTNode *recover_statement(Parser *parser, int start_index)
 		{
 			if (brace_depth == 0)
 				break;
-			brace_depth--;
+			--brace_depth;
 			advance(parser);
 			if (brace_depth == 0)
 				break;
 			continue;
 		}
-
 		advance(parser);
 	}
 
 	if (parser->current <= start_index && !is_at_end(parser))
 		advance(parser);
-
 	return (create_unparsed_node(parser, start_index, parser->current));
 }
 
@@ -432,15 +439,12 @@ static ASTNode *recover_enum_entry(Parser *parser, int start_index)
 		return (NULL);
 	if (start_index < 0 || start_index >= parser->token_count)
 		start_index = parser->current;
-
 	while (!is_at_end(parser))
 	{
 		t = peek(parser);
 		if (!t)
 			break;
-
-		if ((t->type == TOK_COMMA || t->type == TOK_NEWLINE) &&
-		    brace_depth == 0 && paren_depth == 0)
+		if (t->type == TOK_COMMA || t->type == TOK_NEWLINE && brace_depth == 0 && paren_depth == 0)
 		{
 			/* Stop before closing brace so caller can consume it */
 			if (t->type == TOK_COMMA || t->type == TOK_NEWLINE)
@@ -449,22 +453,20 @@ static ASTNode *recover_enum_entry(Parser *parser, int start_index)
 		}
 		if (t->type == TOK_RBRACE && brace_depth == 0 && paren_depth == 0)
 			break;
-
 		if (t->type == TOK_LBRACE)
-			brace_depth++;
+			++brace_depth;
 		else if (t->type == TOK_RBRACE && brace_depth > 0)
-			brace_depth--;
+			--brace_depth;
 		else if (t->type == TOK_LPAREN)
-			paren_depth++;
-		else if (t->type == TOK_RPAREN && paren_depth > 0)
-			paren_depth--;
-
+			++paren_depth;
+		else
+			if (t->type == TOK_RPAREN && paren_depth > 0)
+				--paren_depth;
 		advance(parser);
 	}
 
 	if (parser->current <= start_index && !is_at_end(parser))
 		advance(parser);
-
 	return (create_unparsed_node(parser, start_index, parser->current));
 }
 
@@ -480,7 +482,6 @@ static void add_unparsed_child(Parser *parser, ASTNode *parent, int start_index)
 
 	if (!parent)
 		return;
-
 	raw = recover_top_level(parser, start_index);
 	if (raw)
 	{
@@ -512,8 +513,7 @@ static char *copy_token_text(Parser *parser, int start_index, int end_index)
 		end_index = parser->token_count;
 	if (start_index >= end_index)
 		return (NULL);
-
-	for (i = start_index; i < end_index; i++)
+	for (i = start_index; i < end_index; ++i)
 	{
 		Token *tok = parser->tokens[i];
 
@@ -524,9 +524,8 @@ static char *copy_token_text(Parser *parser, int start_index, int end_index)
 	buffer = malloc(total + 1);
 	if (!buffer)
 		return (NULL);
-
 	cursor = buffer;
-	for (i = start_index; i < end_index; i++)
+	for (i = start_index; i < end_index; ++i)
 	{
 		Token *tok = parser->tokens[i];
 		size_t len;
@@ -545,8 +544,7 @@ static char *copy_token_text(Parser *parser, int start_index, int end_index)
 static int token_allowed_in_type(Token *token)
 {
 	if (!token)
-		return (0);
-
+		return ((0));
 	switch (token->type)
 	{
 	case TOK_WHITESPACE:
@@ -575,9 +573,9 @@ static int token_allowed_in_type(Token *token)
 	case TOK_RBRACKET:
 	case TOK_INTEGER:
 	case TOK_TYPEDEF:
-		return (1);
+		return ((1));
 	default:
-		return (0);
+		return ((0));
 	}
 }
 
@@ -587,8 +585,7 @@ static int token_allowed_in_type(Token *token)
  * @start_index: Index of the first token after '('
  * @closing_index: Optional out param receiving index of closing ')'
  */
-static int looks_like_type_in_parens(Parser *parser, int start_index,
-	int *closing_index)
+static int looks_like_type_in_parens(Parser *parser, int start_index, int *closing_index)
 {
 	int i;
 	int saw_content = 0;
@@ -596,9 +593,8 @@ static int looks_like_type_in_parens(Parser *parser, int start_index,
 	Token *prev_non_ws = NULL;
 
 	if (!parser || start_index < 0 || start_index >= parser->token_count)
-		return (0);
-
-	for (i = start_index; i < parser->token_count; i++)
+		return ((0));
+	for (i = start_index; i < parser->token_count; ++i)
 	{
 		Token *inner = parser->tokens[i];
 
@@ -611,51 +607,36 @@ static int looks_like_type_in_parens(Parser *parser, int start_index,
 			looks_like_type = 0;
 			break;
 		}
-
-		if (inner->type != TOK_WHITESPACE &&
-		    inner->type != TOK_NEWLINE &&
-		    inner->type != TOK_COMMENT_LINE &&
-		    inner->type != TOK_COMMENT_BLOCK)
+		if (inner->type != TOK_WHITESPACE && inner->type != TOK_NEWLINE && inner->type != TOK_COMMENT_LINE && inner->type != TOK_COMMENT_BLOCK)
 		{
 			saw_content = 1;
-
 			if (inner->type == TOK_IDENTIFIER)
 			{
 				int ident_is_type = 0;
 
-				if (prev_non_ws &&
-				    (prev_non_ws->type == TOK_STRUCT ||
-				     prev_non_ws->type == TOK_ENUM ||
-				     prev_non_ws->type == TOK_UNION))
+				if (prev_non_ws && prev_non_ws->type == TOK_STRUCT || prev_non_ws->type == TOK_ENUM || prev_non_ws->type == TOK_UNION)
 				{
 					ident_is_type = 1;
 				}
-				else if (inner->lexeme &&
-					 symbol_is_typedef(parser->symbols, inner->lexeme))
+				else if (inner->lexeme && symbol_is_typedef(parser->symbols, inner->lexeme))
 				{
 					ident_is_type = 1;
 				}
-
 				if (!ident_is_type)
 				{
 					looks_like_type = 0;
 					break;
 				}
 			}
-
 			prev_non_ws = inner;
 		}
 	}
 
-	if (!looks_like_type || !saw_content ||
-	    i >= parser->token_count ||
-	    parser->tokens[i]->type != TOK_RPAREN)
-		return (0);
-
+	if (!looks_like_type || !saw_content || i >= parser->token_count || parser->tokens[i]->type != TOK_RPAREN)
+		return ((0));
 	if (closing_index)
 		*closing_index = i;
-
-	return (1);
+	return ((1));
 }
 
 /*
@@ -668,32 +649,28 @@ static void skip_gnu_attributes(Parser *parser)
 
 	if (!parser)
 		return;
-
 	while (!is_at_end(parser))
 	{
 		tok = peek(parser);
-		if (!tok || tok->type != TOK_IDENTIFIER || !tok->lexeme ||
-		    strcmp(tok->lexeme, "__attribute__") != 0)
+		if (!tok || tok->type != TOK_IDENTIFIER || !tok->lexeme || strcmp(tok->lexeme, "__attribute__") != 0)
 			break;
-
 		advance(parser);
 		skip_whitespace(parser);
-
 		if (!match(parser, TOK_LPAREN))
 			continue;
 		advance(parser); /* consume '(' */
 		skip_whitespace(parser);
-
 		int depth = 1;
+
 		while (!is_at_end(parser) && depth > 0)
 		{
 			tok = peek(parser);
 			if (!tok)
 				break;
 			if (tok->type == TOK_LPAREN)
-				depth++;
+				++depth;
 			else if (tok->type == TOK_RPAREN)
-				depth--;
+				--depth;
 			advance(parser);
 		}
 		skip_whitespace(parser);
@@ -725,7 +702,8 @@ static Token *advance(Parser *parser)
 
 	if (is_at_end(parser))
 		return (NULL);
-	token = parser->tokens[parser->current++];
+	token = parser->tokens[++parser->current];
+
 	/* Track line of last significant token for trailing comments */
 	if (token && token->type != TOK_WHITESPACE && token->type != TOK_NEWLINE)
 		parser->last_token_line = token->line;
@@ -744,7 +722,7 @@ static int match(Parser *parser, TokenType type)
 	Token *token = peek(parser);
 
 	if (!token)
-		return (0);
+		return ((0));
 	return (token->type == type);
 }
 
@@ -761,55 +739,54 @@ static Token *expect(Parser *parser, TokenType type)
 
 	if (!token || token->type != type)
 	{
-		int line = token ? token->line :
-			(parser->current > 0 && parser->tokens[parser->current - 1] ?
-			 parser->tokens[parser->current - 1]->line : 0);
+		int line = token ? token->line : parser->current > 0 && parser->tokens[parser->current - 1] ? parser->tokens[parser->current - 1]->line : 0;
 
 		/* Attempt targeted recovery for common missing tokens so parsing can continue */
 		if (type == TOK_SEMICOLON)
 		{
 			ASTNode *fallback = recover_statement(parser, parser->current);
+
 			if (fallback)
 				ast_node_destroy(fallback);
 		}
 		else if (type == TOK_LBRACE)
 		{
 			ASTNode *fallback = recover_top_level(parser, parser->current);
+
 			if (fallback)
 				ast_node_destroy(fallback);
 		}
 		else if (type == TOK_IDENTIFIER)
 		{
 			ASTNode *fallback = recover_statement(parser, parser->current);
+
 			if (fallback)
 				ast_node_destroy(fallback);
 		}
-
-		fprintf(stderr, "Parse error (line %d): expected %s, got %s\n",
-			line,
-			token_type_to_string(type),
-			token ? token_type_to_string(token->type) : "EOF");
+		fprintf(stderr, "Parse error (line %d): expected %s, got %s\n", line, token_type_to_string(type), token ? token_type_to_string(token->type) : "EOF");
 
 		/* Print a short token window to help debug parser state */
+
 		{
 			int i, start = parser->current, end = parser->current + 6;
-			if (start < 0) start = 0;
-			if (end > parser->token_count) end = parser->token_count;
+
+			if (start < 0)
+				start = 0;
+			if (end > parser->token_count)
+				end = parser->token_count;
 			fprintf(stderr, "  Context tokens (idx: type \"lexeme\"):\n");
-			for (i = start; i < end; i++)
+			for (i = start; i < end; ++i)
 			{
 				Token *ct = parser->tokens[i];
-				if (!ct) continue;
-				fprintf(stderr, "    [%d]: %s \"%s\"\n",
-						i,
-						token_type_to_string(ct->type),
-						ct->lexeme ? ct->lexeme : "");
+
+				if (!ct)
+					continue;
+				fprintf(stderr, "    [%d]: %s \"%s\"\n", i, token_type_to_string(ct->type), ct->lexeme ? ct->lexeme : "");
 			}
 		}
-		parser->error_count++;
+		++parser->error_count;
 		return (NULL);
 	}
-
 	return (advance(parser));
 }
 
@@ -822,16 +799,15 @@ static void add_pending_comment(Parser *parser, Token *comment)
 {
 	if (parser->pending_comment_count >= parser->pending_comment_capacity)
 	{
-		int new_cap = parser->pending_comment_capacity == 0
-			? 4 : parser->pending_comment_capacity * 2;
-		Token **new_buf = realloc(parser->pending_comments,
-			sizeof(Token *) * new_cap);
+		int new_cap = parser->pending_comment_capacity == 0 ? 4 : parser->pending_comment_capacity * 2;
+		Token **new_buf = realloc(parser->pending_comments, sizeof(Token *) * new_cap);
+
 		if (!new_buf)
 			return;
 		parser->pending_comments = new_buf;
 		parser->pending_comment_capacity = new_cap;
 	}
-	parser->pending_comments[parser->pending_comment_count++] = comment;
+	parser->pending_comments[++parser->pending_comment_count] = comment;
 }
 
 /*
@@ -845,8 +821,7 @@ static void attach_pending_comments(Parser *parser, ASTNode *node)
 
 	if (!node || parser->pending_comment_count == 0)
 		return;
-
-	for (i = 0; i < parser->pending_comment_count; i++)
+	for (i = 0; i < parser->pending_comment_count; ++i)
 		ast_node_add_leading_comment(node, parser->pending_comments[i]);
 
 	parser->pending_comment_count = 0;
@@ -864,10 +839,9 @@ static void collect_trailing_comments(Parser *parser, ASTNode *node)
 {
 	Token *token;
 
+	/* Skip only horizontal whitespace, collect comments on same line */
 	if (!node)
 		return;
-
-	/* Skip only horizontal whitespace, collect comments on same line */
 	while (!is_at_end(parser))
 	{
 		token = peek(parser);
@@ -875,9 +849,7 @@ static void collect_trailing_comments(Parser *parser, ASTNode *node)
 		{
 			advance(parser);
 		}
-		else if ((token->type == TOK_COMMENT_LINE ||
-			  token->type == TOK_COMMENT_BLOCK) &&
-			 token->line == parser->last_token_line)
+		else if (token->type == TOK_COMMENT_LINE || token->type == TOK_COMMENT_BLOCK && token->line == parser->last_token_line)
 		{
 			/* Comment on same line - it's a trailing comment */
 			ast_node_add_trailing_comment(node, token);
@@ -905,7 +877,6 @@ static int skip_whitespace(Parser *parser)
 
 	if (parser)
 		parser->whitespace_start = parser->current;
-
 	while (!is_at_end(parser))
 	{
 		token = peek(parser);
@@ -913,11 +884,10 @@ static int skip_whitespace(Parser *parser)
 			advance(parser);
 		else if (token->type == TOK_NEWLINE)
 		{
-			newline_count++;
+			++newline_count;
 			advance(parser);
 		}
-		else if (token->type == TOK_COMMENT_LINE ||
-			 token->type == TOK_COMMENT_BLOCK)
+		else if (token->type == TOK_COMMENT_LINE || token->type == TOK_COMMENT_BLOCK)
 		{
 			add_pending_comment(parser, token);
 			advance(parser);
@@ -933,17 +903,12 @@ static int skip_whitespace(Parser *parser)
 /*
  * Helper functions for expression parsing
  */
-
 /*
  * is_type_keyword - Check if token is a type keyword
  */
 static int is_type_keyword(TokenType type)
 {
-	return (type == TOK_INT || type == TOK_VOID || type == TOK_CHAR_KW ||
-		type == TOK_LONG || type == TOK_SHORT || type == TOK_FLOAT_KW ||
-		type == TOK_DOUBLE || type == TOK_UNSIGNED || type == TOK_SIGNED ||
-		type == TOK_CONST || type == TOK_STATIC || type == TOK_STRUCT ||
-		type == TOK_TYPEDEF || type == TOK_EXTERN);
+	return (type == TOK_INT || type == TOK_VOID || type == TOK_CHAR_KW || type == TOK_LONG || type == TOK_SHORT || type == TOK_FLOAT_KW || type == TOK_DOUBLE || type == TOK_UNSIGNED || type == TOK_SIGNED || type == TOK_CONST || type == TOK_STATIC || type == TOK_STRUCT || type == TOK_TYPEDEF || type == TOK_EXTERN);
 }
 
 /*
@@ -964,37 +929,37 @@ static int get_precedence(TokenType type)
 	case TOK_CARET_ASSIGN:
 	case TOK_LSHIFT_ASSIGN:
 	case TOK_RSHIFT_ASSIGN:
-		return (1); /* Assignment (right-to-left) */
+		return ((1)); /* Assignment (right-to-left) */
 	case TOK_LOGICAL_OR:
-		return (2);
+		return ((2));
 	case TOK_LOGICAL_AND:
-		return (3);
+		return ((3));
 	case TOK_PIPE:
-		return (4);
+		return ((4));
 	case TOK_CARET:
-		return (5);
+		return ((5));
 	case TOK_AMPERSAND:
-		return (6);
+		return ((6));
 	case TOK_EQUAL:
 	case TOK_NOT_EQUAL:
-		return (7);
+		return ((7));
 	case TOK_LESS:
 	case TOK_GREATER:
 	case TOK_LESS_EQUAL:
 	case TOK_GREATER_EQUAL:
-		return (8);
+		return ((8));
 	case TOK_LSHIFT:
 	case TOK_RSHIFT:
-		return (9);
+		return ((9));
 	case TOK_PLUS:
 	case TOK_MINUS:
-		return (10);
+		return ((10));
 	case TOK_STAR:
 	case TOK_SLASH:
 	case TOK_PERCENT:
-		return (11);
+		return ((11));
 	default:
-		return (0);
+		return ((0));
 	}
 }
 
@@ -1011,10 +976,7 @@ static int is_binary_operator(TokenType type)
  */
 static int is_unary_operator(TokenType type)
 {
-	return (type == TOK_LOGICAL_NOT || type == TOK_TILDE ||
-		type == TOK_PLUS || type == TOK_MINUS || type == TOK_STAR ||
-		type == TOK_AMPERSAND || type == TOK_INCREMENT ||
-		type == TOK_DECREMENT);
+	return (type == TOK_LOGICAL_NOT || type == TOK_TILDE || type == TOK_PLUS || type == TOK_MINUS || type == TOK_STAR || type == TOK_AMPERSAND || type == TOK_INCREMENT || type == TOK_DECREMENT);
 }
 
 /*
@@ -1028,22 +990,18 @@ static ASTNode *parse_primary(Parser *parser)
 	skip_whitespace(parser);
 	token = peek(parser);
 
+	/* Literals */
 	if (!token)
 		return (NULL);
-
-	/* Literals */
-	if (token->type == TOK_INTEGER || token->type == TOK_FLOAT ||
-	    token->type == TOK_STRING || token->type == TOK_CHAR)
+	/* Type expression (for macro args like va_arg(ap, int) or va_arg(ap, char *)) */
+	if (token->type == TOK_INTEGER || token->type == TOK_FLOAT || token->type == TOK_STRING || token->type == TOK_CHAR)
 	{
 		node = ast_node_create(NODE_LITERAL, token);
 		advance(parser);
 		return (node);
 	}
-
-	/* Type expression (for macro args like va_arg(ap, int) or va_arg(ap, char *)) */
-	if (is_type_keyword(token->type) ||
-	    token->type == TOK_STRUCT || token->type == TOK_ENUM ||
-	    token->type == TOK_UNION)
+	/* Identifiers and function calls */
+	if (is_type_keyword(token->type) || token->type == TOK_STRUCT || token->type == TOK_ENUM || token->type == TOK_UNION)
 	{
 		Token **type_tokens = NULL;
 		int type_count = 0;
@@ -1051,35 +1009,30 @@ static ASTNode *parse_primary(Parser *parser)
 		FunctionData *type_data;
 
 		type_tokens = malloc(sizeof(Token *) * type_capacity);
+		/* Collect type tokens until comma or rparen */
 		if (!type_tokens)
 			return (NULL);
-
-		/* Collect type tokens until comma or rparen */
-		while (!is_at_end(parser) && !match(parser, TOK_COMMA) &&
-		       !match(parser, TOK_RPAREN))
+		while (!is_at_end(parser) && !match(parser, TOK_COMMA) && !match(parser, TOK_RPAREN))
 		{
 			token = peek(parser);
 			if (!token)
 				break;
-
 			if (type_count >= type_capacity)
 			{
 				type_capacity *= 2;
-				type_tokens = realloc(type_tokens,
-					sizeof(Token *) * type_capacity);
+				type_tokens = realloc(type_tokens, sizeof(Token *) * type_capacity);
 			}
-			type_tokens[type_count++] = advance(parser);
+			type_tokens[++type_count] = advance(parser);
 			skip_whitespace(parser);
 		}
 
 		node = ast_node_create(NODE_TYPE_EXPR, type_tokens[0]);
+		/* Store type tokens in data */
 		if (!node)
 		{
 			free(type_tokens);
 			return (NULL);
 		}
-
-		/* Store type tokens in data */
 		type_data = malloc(sizeof(FunctionData));
 		if (type_data)
 		{
@@ -1096,15 +1049,14 @@ static ASTNode *parse_primary(Parser *parser)
 
 		return (node);
 	}
-
-	/* Identifiers and function calls */
+	/* Parenthesized expression or type cast */
 	if (token->type == TOK_IDENTIFIER)
 	{
 		node = ast_node_create(NODE_IDENTIFIER, token);
 		advance(parser);
 		skip_whitespace(parser);
-
 		/* Check for function call */
+		/* Check for array access */
 		if (match(parser, TOK_LPAREN))
 		{
 			ASTNode *call = ast_node_create(NODE_CALL, token);
@@ -1123,9 +1075,7 @@ static ASTNode *parse_primary(Parser *parser)
 				{
 					/* Failed to parse - skip to comma or ) */
 					/* This handles cases like va_arg(ap, int) */
-					while (!is_at_end(parser) &&
-					       !match(parser, TOK_COMMA) &&
-					       !match(parser, TOK_RPAREN))
+					while (!is_at_end(parser) && !match(parser, TOK_COMMA) && !match(parser, TOK_RPAREN))
 						advance(parser);
 				}
 				skip_whitespace(parser);
@@ -1138,8 +1088,6 @@ static ASTNode *parse_primary(Parser *parser)
 			ast_node_destroy(node);
 			return (call);
 		}
-
-		/* Check for array access */
 		if (match(parser, TOK_LBRACKET))
 		{
 			ASTNode *arr_access = ast_node_create(NODE_ARRAY_ACCESS, NULL);
@@ -1151,11 +1099,8 @@ static ASTNode *parse_primary(Parser *parser)
 			expect(parser, TOK_RBRACKET);
 			return (arr_access);
 		}
-
 		return (node);
 	}
-
-	/* Parenthesized expression or type cast */
 	if (token->type == TOK_LPAREN)
 	{
 		int type_start;
@@ -1174,12 +1119,10 @@ static ASTNode *parse_primary(Parser *parser)
 			cast_node = ast_node_create(NODE_CAST, type_token);
 			if (!cast_node)
 				return (NULL);
-
 			if (closing_index > type_start)
 				type_text = copy_token_text(parser, type_start, closing_index);
 			if (type_text)
 				cast_node->data = type_text;
-
 			parser->current = closing_index;
 			expect(parser, TOK_RPAREN);
 			skip_whitespace(parser);
@@ -1189,7 +1132,6 @@ static ASTNode *parse_primary(Parser *parser)
 				ast_node_add_child(cast_node, node);
 			return (cast_node);
 		}
-
 		parser->current = type_start;
 
 		/* Regular parenthesized expression */
@@ -1198,7 +1140,6 @@ static ASTNode *parse_primary(Parser *parser)
 		expect(parser, TOK_RPAREN);
 		return (node);
 	}
-
 	return (NULL);
 }
 
@@ -1211,103 +1152,10 @@ static ASTNode *parse_postfix(Parser *parser)
 	Token *token = NULL;
 
 	node = parse_primary(parser);
+	/* Handle repeated postfix operations: array access, calls, member access, postfix ++/-- */
 	if (!node)
 		return (NULL);
-
-	/* Handle repeated postfix operations: array access, calls, member access, postfix ++/-- */
-	for (;;)
-	{
-		skip_whitespace(parser);
-		token = peek(parser);
-		if (!token)
-			break;
-
-		/* Array access: expr[ index ] */
-		if (token->type == TOK_LBRACKET)
-		{
-			ASTNode *arr_access = ast_node_create(NODE_ARRAY_ACCESS, NULL);
-
-			advance(parser); /* consume [ */
-			ast_node_add_child(arr_access, node);
-			skip_whitespace(parser);
-			ast_node_add_child(arr_access, parse_expression(parser));
-			skip_whitespace(parser);
-			expect(parser, TOK_RBRACKET);
-			node = arr_access;
-			continue;
-		}
-
-		/* Function call: expr(args...) */
-		if (token->type == TOK_LPAREN)
-		{
-			ASTNode *call = ast_node_create(NODE_CALL, NULL);
-
-			advance(parser); /* consume ( */
-			/* callee as first child */
-			ast_node_add_child(call, node);
-			skip_whitespace(parser);
-
-			/* Parse arguments */
-			while (!is_at_end(parser) && !match(parser, TOK_RPAREN))
-			{
-				ASTNode *arg = parse_expression(parser);
-
-				if (arg)
-					ast_node_add_child(call, arg);
-				else
-				{
-					/* Failed to parse - skip to comma or ) */
-					/* This handles cases like va_arg(ap, int) */
-					while (!is_at_end(parser) &&
-					       !match(parser, TOK_COMMA) &&
-					       !match(parser, TOK_RPAREN))
-						advance(parser);
-				}
-				skip_whitespace(parser);
-				if (match(parser, TOK_COMMA))
-					advance(parser);
-				skip_whitespace(parser);
-			}
-
-			expect(parser, TOK_RPAREN);
-			node = call;
-			continue;
-		}
-
-		/* Member access: .identifier or ->identifier */
-		if (token->type == TOK_DOT || token->type == TOK_ARROW)
-		{
-			ASTNode *member = NULL;
-			Token *name_token = NULL;
-
-			advance(parser); /* consume . or -> */
-			skip_whitespace(parser);
-
-			/* Expect an identifier for the member name */
-			name_token = expect(parser, TOK_IDENTIFIER);
-			if (!name_token)
-				return (NULL);
-
-			member = ast_node_create(NODE_MEMBER_ACCESS, name_token);
-			/* first child is the object, second implicitly the name via token */
-			ast_node_add_child(member, node);
-			node = member;
-			continue;
-		}
-
-		/* Postfix ++ or -- */
-		if (token->type == TOK_INCREMENT || token->type == TOK_DECREMENT)
-		{
-			ASTNode *postfix = ast_node_create(NODE_UNARY, token);
-			advance(parser);
-			ast_node_add_child(postfix, node);
-			node = postfix;
-			continue;
-		}
-
-		break;
-	}
-
+	for (; ; )
 	return (node);
 }
 
@@ -1322,16 +1170,15 @@ static ASTNode *parse_unary(Parser *parser)
 	skip_whitespace(parser);
 	token = peek(parser);
 
+	/* Handle sizeof as a special unary operator */
 	if (!token)
 		return (NULL);
-
-	/* Handle sizeof as a special unary operator */
+	/* Check for other unary operators */
 	if (token->type == TOK_SIZEOF)
 	{
 		node = ast_node_create(NODE_SIZEOF, token);
 		advance(parser);
 		skip_whitespace(parser);
-
 		/* sizeof can be followed by a parenthesized type or expression */
 		if (match(parser, TOK_LPAREN))
 		{
@@ -1344,7 +1191,7 @@ static ASTNode *parse_unary(Parser *parser)
 			skip_whitespace(parser);
 			saved_pos = parser->current;
 
-			for (i = parser->current; i < parser->token_count; i++)
+			for (i = parser->current; i < parser->token_count; ++i)
 			{
 				Token *inner = parser->tokens[i];
 
@@ -1359,9 +1206,8 @@ static ASTNode *parse_unary(Parser *parser)
 				}
 			}
 
-			if (i >= parser->token_count || (parser->tokens[i] && parser->tokens[i]->type != TOK_RPAREN))
+			if (i >= parser->token_count || parser->tokens[i] && parser->tokens[i]->type != TOK_RPAREN)
 				looks_like_type = 0;
-
 			if (looks_like_type)
 			{
 				type_text = copy_token_text(parser, saved_pos, i);
@@ -1386,11 +1232,9 @@ static ASTNode *parse_unary(Parser *parser)
 			if (operand)
 				ast_node_add_child(node, operand);
 		}
-
 		return (node);
 	}
-
-	/* Check for other unary operators */
+	/* Otherwise parse postfix */
 	if (is_unary_operator(token->type))
 	{
 		node = ast_node_create(NODE_UNARY, token);
@@ -1400,8 +1244,6 @@ static ASTNode *parse_unary(Parser *parser)
 			ast_node_add_child(node, operand);
 		return (node);
 	}
-
-	/* Otherwise parse postfix */
 	return (parse_postfix(parser));
 }
 
@@ -1418,17 +1260,15 @@ static ASTNode *parse_expression_precedence(Parser *parser, int min_precedence)
 	left = parse_unary(parser);
 	if (!left)
 		return (NULL);
-
 	skip_whitespace(parser);
 
 	/* Parse binary operators */
 	while (!is_at_end(parser))
 	{
 		op_token = peek(parser);
+		/* Handle ternary operator */
 		if (!op_token)
 			break;
-
-		/* Handle ternary operator */
 		if (op_token->type == TOK_QUESTION)
 		{
 			ASTNode *ternary, *then_expr, *else_expr;
@@ -1445,7 +1285,6 @@ static ASTNode *parse_expression_precedence(Parser *parser, int min_precedence)
 				ast_node_destroy(then_expr);
 				return (NULL);
 			}
-
 			skip_whitespace(parser);
 			else_expr = parse_expression_precedence(parser, min_precedence);
 
@@ -1455,41 +1294,32 @@ static ASTNode *parse_expression_precedence(Parser *parser, int min_precedence)
 				ast_node_add_child(ternary, then_expr);
 			if (else_expr)
 				ast_node_add_child(ternary, else_expr);
-
 			left = ternary;
 			skip_whitespace(parser);
 			continue;
 		}
-
 		if (!is_binary_operator(op_token->type))
 			break;
-
 		precedence = get_precedence(op_token->type);
 		if (precedence < min_precedence)
 			break;
-
 		advance(parser); /* consume operator */
 		skip_whitespace(parser);
-
 		/* Right-associative for assignment operators */
-		if (op_token->type >= TOK_ASSIGN &&
-		    op_token->type <= TOK_RSHIFT_ASSIGN)
+		if (op_token->type >= TOK_ASSIGN && op_token->type <= TOK_RSHIFT_ASSIGN)
 			right = parse_expression_precedence(parser, precedence);
 		else
 			right = parse_expression_precedence(parser, precedence + 1);
-
+		/* Create binary node */
 		if (!right)
 		{
 			ast_node_destroy(left);
 			return (NULL);
 		}
-
-		/* Create binary node */
 		binary = ast_node_create(NODE_BINARY, op_token);
 		ast_node_add_child(binary, left);
 		ast_node_add_child(binary, right);
 		left = binary;
-
 		skip_whitespace(parser);
 	}
 
@@ -1514,12 +1344,12 @@ static ASTNode *parse_initializer(Parser *parser)
 	skip_whitespace(parser);
 
 	/* Check for brace-enclosed initializer list: {1, 2, 3} */
+	/* Regular expression */
 	if (match(parser, TOK_LBRACE))
 	{
 		init = ast_node_create(NODE_INIT_LIST, peek(parser));
 		advance(parser); /* consume { */
 		skip_whitespace(parser);
-
 		/* Parse initializer elements */
 		while (!is_at_end(parser) && !match(parser, TOK_RBRACE))
 		{
@@ -1527,7 +1357,6 @@ static ASTNode *parse_initializer(Parser *parser)
 
 			if (elem)
 				ast_node_add_child(init, elem);
-
 			skip_whitespace(parser);
 			if (match(parser, TOK_COMMA))
 			{
@@ -1535,14 +1364,10 @@ static ASTNode *parse_initializer(Parser *parser)
 				skip_whitespace(parser);
 			}
 		}
-
 		if (match(parser, TOK_RBRACE))
 			advance(parser);
-
 		return (init);
 	}
-
-	/* Regular expression */
 	return (parse_expression(parser));
 }
 
@@ -1550,8 +1375,7 @@ static ASTNode *parse_initializer(Parser *parser)
  * parse_func_ptr_decl - Parse function pointer declaration
  * Handles: int (*callback)(int, int);
  */
-static ASTNode *parse_func_ptr_decl(Parser *parser, Token **type_tokens,
-				    int type_count)
+static ASTNode *parse_func_ptr_decl(Parser *parser, Token **type_tokens, int type_count)
 {
 	ASTNode *node;
 	FuncPtrData *fp_data;
@@ -1564,7 +1388,6 @@ static ASTNode *parse_func_ptr_decl(Parser *parser, Token **type_tokens,
 	/* We're at '(' - expect '(' '*' IDENTIFIER ')' '(' params ')' */
 	if (!match(parser, TOK_LPAREN))
 		return (NULL);
-
 	advance(parser); /* consume '(' */
 	skip_whitespace(parser);
 
@@ -1601,28 +1424,25 @@ static ASTNode *parse_func_ptr_decl(Parser *parser, Token **type_tokens,
 		Token *tok = peek(parser);
 
 		if (tok->type == TOK_LPAREN)
-			paren_depth++;
+			++paren_depth;
 		else if (tok->type == TOK_RPAREN)
 		{
-			paren_depth--;
+			--paren_depth;
 			if (paren_depth == 0)
 				break;
 		}
-
 		if (param_count >= param_capacity)
 		{
 			param_capacity *= 2;
-			param_tokens = realloc(param_tokens,
-					       sizeof(Token *) * param_capacity);
+			param_tokens = realloc(param_tokens, sizeof(Token *) * param_capacity);
 		}
-		param_tokens[param_count++] = advance(parser);
+		param_tokens[++param_count] = advance(parser);
 		skip_whitespace(parser);
 	}
 
 	/* Consume closing ')' */
 	if (match(parser, TOK_RPAREN))
 		advance(parser);
-
 	node = ast_node_create(NODE_FUNC_PTR, type_tokens[0]);
 
 	fp_data = malloc(sizeof(FuncPtrData));
@@ -1663,31 +1483,26 @@ static ASTNode *parse_var_declaration(Parser *parser)
 
 	if (!type_token)
 		return (NULL);
-
 	type_tokens = malloc(sizeof(Token *) * type_capacity);
+	/* Check if it's a built-in type keyword */
 	if (!type_tokens)
 		return (NULL);
-
-	/* Check if it's a built-in type keyword */
 	if (is_type_keyword(type_token->type))
 	{
-		type_tokens[type_count++] = advance(parser);
+		type_tokens[++type_count] = advance(parser);
 		skip_whitespace(parser);
-
 		/* Handle struct/enum name (e.g., "struct node" or "enum color") */
-		if ((type_token->type == TOK_STRUCT || type_token->type == TOK_ENUM) &&
-		    match(parser, TOK_IDENTIFIER))
+		/* Handle compound types: unsigned int, long long, const static int, etc. */
+		if (type_token->type == TOK_STRUCT || type_token->type == TOK_ENUM && match(parser, TOK_IDENTIFIER))
 		{
 			if (type_count >= type_capacity)
 			{
 				type_capacity *= 2;
 				type_tokens = realloc(type_tokens, sizeof(Token *) * type_capacity);
 			}
-			type_tokens[type_count++] = advance(parser);
+			type_tokens[++type_count] = advance(parser);
 			skip_whitespace(parser);
 		}
-
-		/* Handle compound types: unsigned int, long long, const static int, etc. */
 		while (peek(parser) && is_type_keyword(peek(parser)->type))
 		{
 			if (type_count >= type_capacity)
@@ -1695,49 +1510,40 @@ static ASTNode *parse_var_declaration(Parser *parser)
 				type_capacity *= 2;
 				type_tokens = realloc(type_tokens, sizeof(Token *) * type_capacity);
 			}
-			type_tokens[type_count++] = advance(parser);
+			type_tokens[++type_count] = advance(parser);
 			skip_whitespace(parser);
-
 			/* Handle struct/enum name after type keyword */
-			if ((type_tokens[type_count - 1]->type == TOK_STRUCT ||
-			     type_tokens[type_count - 1]->type == TOK_ENUM) &&
-			    match(parser, TOK_IDENTIFIER))
+			if (type_tokens[type_count - 1]->type == TOK_STRUCT || type_tokens[type_count - 1]->type == TOK_ENUM && match(parser, TOK_IDENTIFIER))
 			{
 				if (type_count >= type_capacity)
 				{
 					type_capacity *= 2;
 					type_tokens = realloc(type_tokens, sizeof(Token *) * type_capacity);
 				}
-				type_tokens[type_count++] = advance(parser);
+				type_tokens[++type_count] = advance(parser);
 				skip_whitespace(parser);
 			}
 		}
-
 		/* After modifiers like static/const, check for typedef'd type */
-		if (peek(parser) && peek(parser)->type == TOK_IDENTIFIER &&
-		    symbol_is_typedef(parser->symbols, peek(parser)->lexeme))
+		if (peek(parser) && peek(parser)->type == TOK_IDENTIFIER && symbol_is_typedef(parser->symbols, peek(parser)->lexeme))
 		{
 			if (type_count >= type_capacity)
 			{
 				type_capacity *= 2;
 				type_tokens = realloc(type_tokens, sizeof(Token *) * type_capacity);
 			}
-			type_tokens[type_count++] = advance(parser);
+			type_tokens[++type_count] = advance(parser);
 			skip_whitespace(parser);
 		}
 	}
-	/* Check if it's a typedef'd type */
-	else if (type_token->type == TOK_IDENTIFIER &&
-		 symbol_is_typedef(parser->symbols, type_token->lexeme))
+	else if (type_token->type == TOK_IDENTIFIER && symbol_is_typedef(parser->symbols, type_token->lexeme))
 	{
-		type_tokens[type_count++] = advance(parser);
+		type_tokens[++type_count] = advance(parser);
 		skip_whitespace(parser);
 	}
-	/* Heuristic: unknown identifier that looks like a type (from headers) */
-	else if (type_token->type == TOK_IDENTIFIER &&
-		 looks_like_ptr_declaration(parser))
+	else if (type_token->type == TOK_IDENTIFIER && looks_like_ptr_declaration(parser))
 	{
-		type_tokens[type_count++] = advance(parser);
+		type_tokens[++type_count] = advance(parser);
 		skip_whitespace(parser);
 	}
 	else
@@ -1748,15 +1554,14 @@ static ASTNode *parse_var_declaration(Parser *parser)
 
 	/* Handle pointer declarations: int *ptr or node_t *node */
 	/* Also handle const/volatile after pointer: char * const ptr */
-	while (match(parser, TOK_STAR) || match(parser, TOK_CONST) ||
-	       match(parser, TOK_VOLATILE))
+	while (match(parser, TOK_STAR) || match(parser, TOK_CONST) || match(parser, TOK_VOLATILE))
 	{
 		if (type_count >= type_capacity)
 		{
 			type_capacity *= 2;
 			type_tokens = realloc(type_tokens, sizeof(Token *) * type_capacity);
 		}
-		type_tokens[type_count++] = advance(parser);
+		type_tokens[++type_count] = advance(parser);
 		skip_whitespace(parser);
 	}
 
@@ -1769,7 +1574,7 @@ static ASTNode *parse_var_declaration(Parser *parser)
 
 		if (t1 && t1->type == TOK_LPAREN)
 		{
-			parser->current++;
+			++parser->current;
 			skip_whitespace(parser);
 			Token *t2 = peek(parser);
 
@@ -1779,8 +1584,8 @@ static ASTNode *parse_var_declaration(Parser *parser)
 
 				/* This looks like a function pointer */
 				parser->current = saved_pos;
-				fp_node = parse_func_ptr_decl(parser, type_tokens,
-							     type_count);
+				fp_node = parse_func_ptr_decl(parser, type_tokens, type_count);
+
 				/* Consume the semicolon after func ptr decl */
 				skip_whitespace(parser);
 				expect(parser, TOK_SEMICOLON);
@@ -1789,14 +1594,12 @@ static ASTNode *parse_var_declaration(Parser *parser)
 		}
 		parser->current = saved_pos;
 	}
-
 	name_token = expect(parser, TOK_IDENTIFIER);
 	if (!name_token)
 	{
 		free(type_tokens);
 		return (NULL);
 	}
-
 	node = ast_node_create(NODE_VAR_DECL, type_token);
 	skip_whitespace(parser);
 
@@ -1809,9 +1612,8 @@ static ASTNode *parse_var_declaration(Parser *parser)
 			array_capacity *= 2;
 			array_tokens = realloc(array_tokens, sizeof(Token *) * array_capacity);
 		}
-		array_tokens[array_count++] = advance(parser); /* [ */
+		array_tokens[++array_count] = advance(parser); /* [ */
 		skip_whitespace(parser);
-
 		/* Consume array size if present */
 		while (!is_at_end(parser) && !match(parser, TOK_RBRACKET))
 		{
@@ -1820,10 +1622,9 @@ static ASTNode *parse_var_declaration(Parser *parser)
 				array_capacity *= 2;
 				array_tokens = realloc(array_tokens, sizeof(Token *) * array_capacity);
 			}
-			array_tokens[array_count++] = advance(parser);
+			array_tokens[++array_count] = advance(parser);
 			skip_whitespace(parser);
 		}
-
 		if (match(parser, TOK_RBRACKET))
 		{
 			if (array_count >= array_capacity)
@@ -1831,7 +1632,7 @@ static ASTNode *parse_var_declaration(Parser *parser)
 				array_capacity *= 2;
 				array_tokens = realloc(array_tokens, sizeof(Token *) * array_capacity);
 			}
-			array_tokens[array_count++] = advance(parser); /* ] */
+			array_tokens[++array_count] = advance(parser); /* ] */
 		}
 		skip_whitespace(parser);
 	}
@@ -1870,7 +1671,6 @@ static ASTNode *parse_var_declaration(Parser *parser)
 				var_data->init_expr = init;
 		}
 	}
-
 	skip_whitespace(parser);
 
 	/* Handle comma-separated declarations: int i, j, k; */
@@ -1893,19 +1693,19 @@ static ASTNode *parse_var_declaration(Parser *parser)
 			skip_whitespace(parser);
 
 			/* Copy base type tokens, then add any pointers */
-			extra_type_tokens = malloc(sizeof(Token *) * (type_count + 4));
-			for (i = 0; i < type_count; i++)
+			extra_type_tokens = malloc(sizeof(Token *) * type_count + 4);
+			for (i = 0; i < type_count; ++i)
 			{
 				/* Copy type but stop at pointers */
 				if (type_tokens[i]->type == TOK_STAR)
 					break;
-				extra_type_tokens[extra_type_count++] = type_tokens[i];
+				extra_type_tokens[++extra_type_count] = type_tokens[i];
 			}
 
 			/* Handle pointer in comma list: int *p, *q */
 			while (match(parser, TOK_STAR))
 			{
-				extra_type_tokens[extra_type_count++] = advance(parser);
+				extra_type_tokens[++extra_type_count] = advance(parser);
 				skip_whitespace(parser);
 			}
 
@@ -1915,10 +1715,10 @@ static ASTNode *parse_var_declaration(Parser *parser)
 				free(extra_type_tokens);
 				break;
 			}
-
 			skip_whitespace(parser);
 
 			/* Handle array in comma list */
+			/* Create extra VarDeclData */
 			if (match(parser, TOK_LBRACKET))
 			{
 				int arr_cap = 4;
@@ -1926,28 +1726,23 @@ static ASTNode *parse_var_declaration(Parser *parser)
 				extra_arr_tokens = malloc(sizeof(Token *) * arr_cap);
 				while (match(parser, TOK_LBRACKET))
 				{
-					extra_arr_tokens[extra_arr_count++] = advance(parser);
+					extra_arr_tokens[++extra_arr_count] = advance(parser);
 					skip_whitespace(parser);
-
 					while (!is_at_end(parser) && !match(parser, TOK_RBRACKET))
 					{
 						if (extra_arr_count >= arr_cap)
 						{
 							arr_cap *= 2;
-							extra_arr_tokens = realloc(extra_arr_tokens,
-								sizeof(Token *) * arr_cap);
+							extra_arr_tokens = realloc(extra_arr_tokens, sizeof(Token *) * arr_cap);
 						}
-						extra_arr_tokens[extra_arr_count++] = advance(parser);
+						extra_arr_tokens[++extra_arr_count] = advance(parser);
 						skip_whitespace(parser);
 					}
-
 					if (match(parser, TOK_RBRACKET))
-						extra_arr_tokens[extra_arr_count++] = advance(parser);
+						extra_arr_tokens[++extra_arr_count] = advance(parser);
 					skip_whitespace(parser);
 				}
 			}
-
-			/* Create extra VarDeclData */
 			extra = malloc(sizeof(VarDeclData));
 			if (extra)
 			{
@@ -1959,7 +1754,6 @@ static ASTNode *parse_var_declaration(Parser *parser)
 				extra->extra_vars = NULL;
 				extra->extra_count = 0;
 				extra->init_expr = NULL;
-
 				/* Check for initialization of this variable */
 				if (match(parser, TOK_ASSIGN))
 				{
@@ -1967,13 +1761,12 @@ static ASTNode *parse_var_declaration(Parser *parser)
 					extra->init_expr = parse_expression(parser);
 					skip_whitespace(parser);
 				}
-
 				if (extra_count >= extra_capacity)
 				{
 					extra_capacity *= 2;
 					extras = realloc(extras, sizeof(VarDeclData *) * extra_capacity);
 				}
-				extras[extra_count++] = extra;
+				extras[++extra_count] = extra;
 			}
 			else
 			{
@@ -1987,7 +1780,6 @@ static ASTNode *parse_var_declaration(Parser *parser)
 		var_data->extra_vars = extras;
 		var_data->extra_count = extra_count;
 	}
-
 	expect(parser, TOK_SEMICOLON);
 
 	return (node);
@@ -2005,7 +1797,6 @@ static ASTNode *parse_if_statement(Parser *parser)
 
 	if (!expect(parser, TOK_LPAREN))
 		return (NULL);
-
 	condition = parse_expression(parser);
 	skip_whitespace(parser);
 
@@ -2014,7 +1805,6 @@ static ASTNode *parse_if_statement(Parser *parser)
 		ast_node_destroy(condition);
 		return (NULL);
 	}
-
 	skip_whitespace(parser);
 
 	then_branch = parse_statement(parser);
@@ -2024,7 +1814,6 @@ static ASTNode *parse_if_statement(Parser *parser)
 		ast_node_add_child(node, condition);
 	if (then_branch)
 		ast_node_add_child(node, then_branch);
-
 	skip_whitespace(parser);
 
 	/* Check for else */
@@ -2036,7 +1825,6 @@ static ASTNode *parse_if_statement(Parser *parser)
 		if (else_branch)
 			ast_node_add_child(node, else_branch);
 	}
-
 	return (node);
 }
 
@@ -2052,7 +1840,6 @@ static ASTNode *parse_while_statement(Parser *parser)
 
 	if (!expect(parser, TOK_LPAREN))
 		return (NULL);
-
 	condition = parse_expression(parser);
 	skip_whitespace(parser);
 
@@ -2061,7 +1848,6 @@ static ASTNode *parse_while_statement(Parser *parser)
 		ast_node_destroy(condition);
 		return (NULL);
 	}
-
 	skip_whitespace(parser);
 	body = parse_statement(parser);
 
@@ -2070,7 +1856,6 @@ static ASTNode *parse_while_statement(Parser *parser)
 		ast_node_add_child(node, condition);
 	if (body)
 		ast_node_add_child(node, body);
-
 	return (node);
 }
 
@@ -2086,7 +1871,6 @@ static ASTNode *parse_for_statement(Parser *parser)
 
 	if (!expect(parser, TOK_LPAREN))
 		return (NULL);
-
 	node = ast_node_create(NODE_FOR, NULL);
 
 	/* Initialization - handle comma expressions like: i = 0, j = n - 1 */
@@ -2149,7 +1933,6 @@ static ASTNode *parse_for_statement(Parser *parser)
 	body = parse_statement(parser);
 	if (body)
 		ast_node_add_child(node, body);
-
 	return (node);
 }
 
@@ -2169,7 +1952,6 @@ static ASTNode *parse_switch_statement(Parser *parser)
 
 	if (!expect(parser, TOK_LPAREN))
 		return (NULL);
-
 	expr = parse_expression(parser);
 	skip_whitespace(parser);
 
@@ -2178,11 +1960,9 @@ static ASTNode *parse_switch_statement(Parser *parser)
 		ast_node_destroy(expr);
 		return (NULL);
 	}
-
 	node = ast_node_create(NODE_SWITCH, NULL);
 	if (expr)
 		ast_node_add_child(node, expr);
-
 	skip_whitespace(parser);
 
 	/* Parse switch body */
@@ -2191,7 +1971,6 @@ static ASTNode *parse_switch_statement(Parser *parser)
 		ast_node_destroy(node);
 		return (NULL);
 	}
-
 	skip_whitespace(parser);
 
 	/* Parse cases and default */
@@ -2199,33 +1978,27 @@ static ASTNode *parse_switch_statement(Parser *parser)
 	{
 		skip_whitespace(parser);
 		token = peek(parser);
-
 		if (!token)
 			break;
-
 		if (token->type == TOK_CASE)
 		{
 			advance(parser); /* consume 'case' */
 			skip_whitespace(parser);
-
 			case_node = ast_node_create(NODE_CASE, token);
-
 			/* Parse case value */
 			ASTNode *case_val = parse_expression(parser);
+
 			if (case_val)
 				ast_node_add_child(case_node, case_val);
-
 			skip_whitespace(parser);
 			expect(parser, TOK_COLON);
 			skip_whitespace(parser);
 
 			/* Parse statements until next case/default/rbrace */
-			while (!is_at_end(parser) &&
-			       !match(parser, TOK_CASE) &&
-			       !match(parser, TOK_DEFAULT) &&
-			       !match(parser, TOK_RBRACE))
+			while (!is_at_end(parser) && !match(parser, TOK_CASE) && !match(parser, TOK_DEFAULT) && !match(parser, TOK_RBRACE))
 			{
 				ASTNode *stmt = parse_statement(parser);
+
 				if (stmt)
 					ast_node_add_child(case_node, stmt);
 				skip_whitespace(parser);
@@ -2239,20 +2012,16 @@ static ASTNode *parse_switch_statement(Parser *parser)
 			skip_whitespace(parser);
 			expect(parser, TOK_COLON);
 			skip_whitespace(parser);
-
 			case_node = ast_node_create(NODE_CASE, token);
-
 			/* Parse statements until next case/rbrace */
-			while (!is_at_end(parser) &&
-			       !match(parser, TOK_CASE) &&
-			       !match(parser, TOK_RBRACE))
+			while (!is_at_end(parser) && !match(parser, TOK_CASE) && !match(parser, TOK_RBRACE))
 			{
 				ASTNode *stmt = parse_statement(parser);
+
 				if (stmt)
 					ast_node_add_child(case_node, stmt);
 				skip_whitespace(parser);
 			}
-
 			ast_node_add_child(node, case_node);
 		}
 		else
@@ -2289,7 +2058,6 @@ static ASTNode *parse_do_while_statement(Parser *parser)
 		ast_node_destroy(body);
 		return (NULL);
 	}
-
 	skip_whitespace(parser);
 
 	if (!expect(parser, TOK_LPAREN))
@@ -2297,7 +2065,6 @@ static ASTNode *parse_do_while_statement(Parser *parser)
 		ast_node_destroy(body);
 		return (NULL);
 	}
-
 	condition = parse_expression(parser);
 	skip_whitespace(parser);
 
@@ -2307,7 +2074,6 @@ static ASTNode *parse_do_while_statement(Parser *parser)
 		ast_node_destroy(condition);
 		return (NULL);
 	}
-
 	skip_whitespace(parser);
 	expect(parser, TOK_SEMICOLON);
 
@@ -2316,7 +2082,6 @@ static ASTNode *parse_do_while_statement(Parser *parser)
 		ast_node_add_child(node, body);
 	if (condition)
 		ast_node_add_child(node, condition);
-
 	return (node);
 }
 
@@ -2335,30 +2100,26 @@ static ASTNode *parse_block(Parser *parser)
 
 	if (!expect(parser, TOK_LBRACE))
 		return (NULL);
-
 	block = ast_node_create(NODE_BLOCK, NULL);
 	if (!block)
 		return (NULL);
-
 	skip_whitespace(parser);
 
 	/* Parse statements until we hit } */
 	while (!is_at_end(parser) && !match(parser, TOK_RBRACE))
 	{
 		blank_lines = skip_whitespace(parser);
-
 		if (match(parser, TOK_RBRACE))
 			break;
-
 		stmt = parse_statement(parser);
+		/* Don't skip whitespace here - we do it at the start of the loop */
 		if (stmt)
 		{
 			attach_pending_comments(parser, stmt);
 			/* Preserve user blank lines (max 1) */
-			stmt->blank_lines_before = (blank_lines > 0 ? 1 : 0);
+			stmt->blank_lines_before = blank_lines > 0 ? 1 : 0;
 			ast_node_add_child(block, stmt);
 		}
-		/* Don't skip whitespace here - we do it at the start of the loop */
 	}
 
 	skip_whitespace(parser);
@@ -2387,120 +2148,117 @@ static ASTNode *parse_statement(Parser *parser)
 		statement_start = parser->current;
 	else if (statement_start > parser->current)
 		statement_start = parser->current;
-
 	skip_whitespace(parser);
 	token = peek(parser);
 
 	if (!token)
 		return (NULL);
-
 	if (parser->pending_comment_count > 0)
 	{
 		saved_count = parser->pending_comment_count;
 		saved_comments = malloc(sizeof(Token *) * saved_count);
 		if (saved_comments)
 		{
-			for (i = 0; i < saved_count; i++)
+			for (i = 0; i < saved_count; ++i)
 				saved_comments[i] = parser->pending_comments[i];
 		}
 		parser->pending_comment_count = 0;
 	}
-
 	if (token->type == TOK_IF)
 		node = parse_if_statement(parser);
 	else if (token->type == TOK_WHILE)
 		node = parse_while_statement(parser);
 	else if (token->type == TOK_FOR)
 		node = parse_for_statement(parser);
-	else if (token->type == TOK_SWITCH)
-		node = parse_switch_statement(parser);
-	else if (token->type == TOK_DO)
-		node = parse_do_while_statement(parser);
-	else if (token->type == TOK_RETURN)
-	{
-		advance(parser);
-		node = ast_node_create(NODE_RETURN, token);
-		skip_whitespace(parser);
-
-		if (node && !match(parser, TOK_SEMICOLON))
-		{
-			ASTNode *expr = parse_expression(parser);
-
-			if (expr)
-				ast_node_add_child(node, expr);
-			else
-			{
-				ast_node_destroy(node);
-				node = NULL;
-			}
-		}
-
-		skip_whitespace(parser);
-		if (node && !expect(parser, TOK_SEMICOLON))
-		{
-			ast_node_destroy(node);
-			node = NULL;
-		}
-	}
-	else if (token->type == TOK_BREAK)
-	{
-		node = ast_node_create(NODE_BREAK, token);
-		advance(parser);
-		skip_whitespace(parser);
-		if (node && !expect(parser, TOK_SEMICOLON))
-		{
-			ast_node_destroy(node);
-			node = NULL;
-		}
-	}
-	else if (token->type == TOK_CONTINUE)
-	{
-		node = ast_node_create(NODE_CONTINUE, token);
-		advance(parser);
-		skip_whitespace(parser);
-		if (node && !expect(parser, TOK_SEMICOLON))
-		{
-			ast_node_destroy(node);
-			node = NULL;
-		}
-	}
-	else if (token->type == TOK_LBRACE)
-		node = parse_block(parser);
-	else if (token->type == TOK_TYPEDEF)
-		node = parse_typedef(parser);
-	else if (is_type_keyword(token->type))
-		node = parse_var_declaration(parser);
-	else if (token->type == TOK_IDENTIFIER &&
-		 symbol_is_typedef(parser->symbols, token->lexeme))
-		node = parse_var_declaration(parser);
-	else if (token->type == TOK_IDENTIFIER && looks_like_ptr_declaration(parser))
-		node = parse_var_declaration(parser);
 	else
-	{
-		node = ast_node_create(NODE_EXPR_STMT, NULL);
-		if (node)
+		if (token->type == TOK_SWITCH)
+			node = parse_switch_statement(parser);
+		else if (token->type == TOK_DO)
+			node = parse_do_while_statement(parser);
+		else if (token->type == TOK_RETURN)
 		{
-			ASTNode *expr = parse_expression(parser);
-
-			if (expr)
-				ast_node_add_child(node, expr);
-			else
-			{
-				ast_node_destroy(node);
-				node = NULL;
-			}
-		}
-
-		if (node)
-		{
+			advance(parser);
+			node = ast_node_create(NODE_RETURN, token);
 			skip_whitespace(parser);
-			if (!expect(parser, TOK_SEMICOLON))
+			if (node && !match(parser, TOK_SEMICOLON))
+			{
+				ASTNode *expr = parse_expression(parser);
+
+				if (expr)
+					ast_node_add_child(node, expr);
+				else
+				{
+					ast_node_destroy(node);
+					node = NULL;
+				}
+			}
+			skip_whitespace(parser);
+			if (node && !expect(parser, TOK_SEMICOLON))
 			{
 				ast_node_destroy(node);
 				node = NULL;
 			}
 		}
-	}
+		else
+			if (token->type == TOK_BREAK)
+			{
+				node = ast_node_create(NODE_BREAK, token);
+				advance(parser);
+				skip_whitespace(parser);
+				if (node && !expect(parser, TOK_SEMICOLON))
+				{
+					ast_node_destroy(node);
+					node = NULL;
+				}
+			}
+			else if (token->type == TOK_CONTINUE)
+			{
+				node = ast_node_create(NODE_CONTINUE, token);
+				advance(parser);
+				skip_whitespace(parser);
+				if (node && !expect(parser, TOK_SEMICOLON))
+				{
+					ast_node_destroy(node);
+					node = NULL;
+				}
+			}
+			else if (token->type == TOK_LBRACE)
+				node = parse_block(parser);
+			else
+				if (token->type == TOK_TYPEDEF)
+					node = parse_typedef(parser);
+				else if (is_type_keyword(token->type))
+					node = parse_var_declaration(parser);
+				else if (token->type == TOK_IDENTIFIER && symbol_is_typedef(parser->symbols, token->lexeme))
+					node = parse_var_declaration(parser);
+				else
+					if (token->type == TOK_IDENTIFIER && looks_like_ptr_declaration(parser))
+						node = parse_var_declaration(parser);
+					else
+					{
+						node = ast_node_create(NODE_EXPR_STMT, NULL);
+						if (node)
+						{
+							ASTNode *expr = parse_expression(parser);
+
+							if (expr)
+								ast_node_add_child(node, expr);
+							else
+							{
+								ast_node_destroy(node);
+								node = NULL;
+							}
+						}
+						if (node)
+						{
+							skip_whitespace(parser);
+							if (!expect(parser, TOK_SEMICOLON))
+							{
+								ast_node_destroy(node);
+								node = NULL;
+							}
+						}
+					}
 
 	if (!node || parser->error_count > start_errors)
 	{
@@ -2516,14 +2274,12 @@ static ASTNode *parse_statement(Parser *parser)
 		clear_pending_comments(parser);
 		return (raw);
 	}
-
 	if (saved_comments)
 	{
-		for (i = 0; i < saved_count; i++)
+		for (i = 0; i < saved_count; ++i)
 			ast_node_add_leading_comment(node, saved_comments[i]);
 		free(saved_comments);
 	}
-
 	collect_trailing_comments(parser, node);
 	return (node);
 }
@@ -2548,17 +2304,14 @@ static ASTNode *parse_struct_definition(Parser *parser)
 		advance(parser);
 		skip_whitespace(parser);
 	}
-
 	node = ast_node_create(NODE_STRUCT, name_token);
+	/* Parse struct body if present */
 	if (!node)
 		return (NULL);
-
-	/* Parse struct body if present */
 	if (match(parser, TOK_LBRACE))
 	{
 		advance(parser); /* consume { */
 		skip_whitespace(parser);
-
 		/* Parse struct members as variable declarations */
 		while (!is_at_end(parser) && !match(parser, TOK_RBRACE))
 		{
@@ -2569,9 +2322,9 @@ static ASTNode *parse_struct_definition(Parser *parser)
 			skip_whitespace(parser);
 			if (match(parser, TOK_RBRACE))
 				break;
-
 			member_start = parser->current;
 			member_errors = parser->error_count;
+
 			/* Parse member as variable declaration */
 			member = parse_var_declaration(parser);
 			if (member && parser->error_count == member_errors)
@@ -2595,7 +2348,6 @@ static ASTNode *parse_struct_definition(Parser *parser)
 				}
 			}
 		}
-
 		if (!match(parser, TOK_RBRACE))
 		{
 			ast_node_destroy(node);
@@ -2604,7 +2356,6 @@ static ASTNode *parse_struct_definition(Parser *parser)
 		}
 		advance(parser);
 	}
-
 	return (node);
 }
 
@@ -2628,17 +2379,14 @@ static ASTNode *parse_enum_definition(Parser *parser)
 		advance(parser);
 		skip_whitespace(parser);
 	}
-
 	node = ast_node_create(NODE_ENUM, name_token);
+	/* Parse enum body if present */
 	if (!node)
 		return (NULL);
-
-	/* Parse enum body if present */
 	if (match(parser, TOK_LBRACE))
 	{
 		advance(parser); /* consume { */
 		skip_whitespace(parser);
-
 		/* Parse enum values */
 		while (!is_at_end(parser) && !match(parser, TOK_RBRACE))
 		{
@@ -2649,10 +2397,9 @@ static ASTNode *parse_enum_definition(Parser *parser)
 			skip_whitespace(parser);
 			entry_start = parser->current;
 			entry_errors = parser->error_count;
+			/* Each enum value is an identifier */
 			if (match(parser, TOK_RBRACE))
 				break;
-
-			/* Each enum value is an identifier */
 			if (match(parser, TOK_IDENTIFIER))
 			{
 				Token *ident = advance(parser);
@@ -2671,22 +2418,17 @@ static ASTNode *parse_enum_definition(Parser *parser)
 					advance(parser);
 					skip_whitespace(parser);
 					/* Consume the value expression */
-					while (!is_at_end(parser) &&
-					       !match(parser, TOK_COMMA) &&
-					       !match(parser, TOK_RBRACE))
+					while (!is_at_end(parser) && !match(parser, TOK_COMMA) && !match(parser, TOK_RBRACE))
 					{
 						/* Store value as child if it's a literal */
-						if (enum_val->child_count == 0 &&
-						    (match(parser, TOK_INTEGER) || match(parser, TOK_IDENTIFIER)))
+						if (enum_val->child_count == 0 && match(parser, TOK_INTEGER) || match(parser, TOK_IDENTIFIER))
 						{
-							ast_node_add_child(enum_val,
-								ast_node_create(NODE_LITERAL, peek(parser)));
+							ast_node_add_child(enum_val, ast_node_create(NODE_LITERAL, peek(parser)));
 						}
 						advance(parser);
 						skip_whitespace(parser);
 					}
 				}
-
 				if (parser->error_count == entry_errors)
 					ast_node_add_child(node, enum_val);
 				else
@@ -2719,7 +2461,6 @@ static ASTNode *parse_enum_definition(Parser *parser)
 				skip_whitespace(parser);
 			}
 		}
-
 		if (!match(parser, TOK_RBRACE))
 		{
 			ast_node_destroy(node);
@@ -2728,7 +2469,6 @@ static ASTNode *parse_enum_definition(Parser *parser)
 		}
 		advance(parser);
 	}
-
 	return (node);
 }
 
@@ -2752,17 +2492,14 @@ static ASTNode *parse_union_definition(Parser *parser)
 		advance(parser);
 		skip_whitespace(parser);
 	}
-
 	node = ast_node_create(NODE_STRUCT, name_token); /* Reuse STRUCT node type */
+	/* Parse union body if present */
 	if (!node)
 		return (NULL);
-
-	/* Parse union body if present */
 	if (match(parser, TOK_LBRACE))
 	{
 		advance(parser); /* consume { */
 		skip_whitespace(parser);
-
 		/* Parse union members like struct members */
 		while (!is_at_end(parser) && !match(parser, TOK_RBRACE))
 		{
@@ -2773,7 +2510,6 @@ static ASTNode *parse_union_definition(Parser *parser)
 			skip_whitespace(parser);
 			if (match(parser, TOK_RBRACE))
 				break;
-
 			member_start = parser->current;
 			member_errors = parser->error_count;
 			member = parse_var_declaration(parser);
@@ -2795,7 +2531,6 @@ static ASTNode *parse_union_definition(Parser *parser)
 				}
 			}
 		}
-
 		if (!match(parser, TOK_RBRACE))
 		{
 			ast_node_destroy(node);
@@ -2804,7 +2539,6 @@ static ASTNode *parse_union_definition(Parser *parser)
 		}
 		advance(parser);
 	}
-
 	return (node);
 }
 
@@ -2875,10 +2609,9 @@ static ASTNode *parse_typedef(Parser *parser)
 			if (base_count >= base_capacity)
 			{
 				base_capacity *= 2;
-				base_tokens = realloc(base_tokens,
-						      sizeof(Token *) * base_capacity);
+				base_tokens = realloc(base_tokens, sizeof(Token *) * base_capacity);
 			}
-			base_tokens[base_count++] = advance(parser);
+			base_tokens[++base_count] = advance(parser);
 			skip_whitespace(parser);
 		}
 
@@ -2888,14 +2621,14 @@ static ASTNode *parse_typedef(Parser *parser)
 			if (base_count >= base_capacity)
 			{
 				base_capacity *= 2;
-				base_tokens = realloc(base_tokens,
-						      sizeof(Token *) * base_capacity);
+				base_tokens = realloc(base_tokens, sizeof(Token *) * base_capacity);
 			}
-			base_tokens[base_count++] = advance(parser);
+			base_tokens[++base_count] = advance(parser);
 			skip_whitespace(parser);
 		}
 
 		/* Check for function pointer typedef: int (*name)(params) */
+		/* Regular typedef processing */
 		if (match(parser, TOK_LPAREN))
 		{
 			int saved_pos = parser->current;
@@ -2908,22 +2641,20 @@ static ASTNode *parse_typedef(Parser *parser)
 				ASTNode *fp_node;
 
 				parser->current = saved_pos;
-				fp_node = parse_func_ptr_decl(parser, base_tokens,
-							      base_count);
+				fp_node = parse_func_ptr_decl(parser, base_tokens, base_count);
 				if (fp_node)
 				{
 					/* Register the typedef */
 					FuncPtrData *fp_data = (FuncPtrData *)fp_node->data;
 
+					/* Store the func ptr node as child */
 					if (fp_data && fp_data->name_token)
 					{
 						node->token = fp_data->name_token;
-						symbol_add(parser->symbols,
-							   fp_data->name_token->lexeme,
-							   SYM_TYPEDEF);
+						symbol_add(parser->symbols, fp_data->name_token->lexeme, SYM_TYPEDEF);
 					}
-					/* Store the func ptr node as child */
 					ast_node_add_child(node, fp_node);
+
 					/* Skip semicolon */
 					skip_whitespace(parser);
 					expect(parser, TOK_SEMICOLON);
@@ -2932,8 +2663,6 @@ static ASTNode *parse_typedef(Parser *parser)
 			}
 			parser->current = saved_pos;
 		}
-
-		/* Regular typedef processing */
 		while (!is_at_end(parser) && !match(parser, TOK_SEMICOLON))
 		{
 			/* The last identifier before semicolon is the typedef name */
@@ -2945,19 +2674,20 @@ static ASTNode *parse_typedef(Parser *parser)
 				advance(parser);
 				skip_whitespace(parser);
 				next = peek(parser);
+
 				/* If next is semicolon, this was the alias */
+				/* Otherwise it's part of the type */
 				if (next && next->type == TOK_SEMICOLON)
 				{
 					node->token = alias_token;
 					break;
 				}
-				/* Otherwise it's part of the type */
 				if (base_count >= base_capacity)
 				{
 					base_capacity *= 2;
 					base_tokens = realloc(base_tokens, sizeof(Token *) * base_capacity);
 				}
-				base_tokens[base_count++] = alias_token;
+				base_tokens[++base_count] = alias_token;
 			}
 			else
 			{
@@ -2967,7 +2697,7 @@ static ASTNode *parse_typedef(Parser *parser)
 					base_capacity *= 2;
 					base_tokens = realloc(base_tokens, sizeof(Token *) * base_capacity);
 				}
-				base_tokens[base_count++] = peek(parser);
+				base_tokens[++base_count] = peek(parser);
 				advance(parser);
 				skip_whitespace(parser);
 			}
@@ -2986,7 +2716,6 @@ static ASTNode *parse_typedef(Parser *parser)
 	/* Register the typedef name in symbol table */
 	if (node->token && node->token->lexeme)
 		symbol_add(parser->symbols, node->token->lexeme, SYM_TYPEDEF);
-
 	return (node);
 }
 
@@ -3018,35 +2747,29 @@ static ASTNode *parse_parameter(Parser *parser)
 		param->data = NULL;
 		return (param);
 	}
-
 	type_tokens = malloc(sizeof(Token *) * type_capacity);
 	if (!type_tokens)
 		return (NULL);
-
 	type_start = peek(parser);
+	/* Collect type tokens (const, unsigned, int, *, etc.) */
 	if (!type_start)
 	{
 		free(type_tokens);
 		return (NULL);
 	}
-
-	/* Collect type tokens (const, unsigned, int, *, etc.) */
-	while (!is_at_end(parser) && !match(parser, TOK_COMMA) &&
-	       !match(parser, TOK_RPAREN))
+	while (!is_at_end(parser) && !match(parser, TOK_COMMA) && !match(parser, TOK_RPAREN))
 	{
 		Token *tok = peek(parser);
 
+		/* Check if this looks like a parameter name (identifier not followed by *) */
 		if (!tok)
 			break;
-
-		/* Check if this looks like a parameter name (identifier not followed by *) */
+		/* Add to type tokens */
 		if (tok->type == TOK_IDENTIFIER)
 		{
 			Token *next = peek_ahead(parser, 1);
 
-			if (!next || next->type == TOK_COMMA ||
-			    next->type == TOK_RPAREN ||
-			    next->type == TOK_LBRACKET)
+			if (!next || next->type == TOK_COMMA || next->type == TOK_RPAREN || next->type == TOK_LBRACKET)
 			{
 				/* This is the parameter name */
 				name = advance(parser);
@@ -3057,34 +2780,30 @@ static ASTNode *parse_parameter(Parser *parser)
 					if (type_count >= type_capacity)
 					{
 						type_capacity *= 2;
-						type_tokens = realloc(type_tokens,
-							sizeof(Token *) * type_capacity);
+						type_tokens = realloc(type_tokens, sizeof(Token *) * type_capacity);
 					}
-					type_tokens[type_count++] = advance(parser);
+					type_tokens[++type_count] = advance(parser);
 					skip_whitespace(parser);
 					if (match(parser, TOK_RBRACKET))
 					{
 						if (type_count >= type_capacity)
 						{
 							type_capacity *= 2;
-							type_tokens = realloc(type_tokens,
-								sizeof(Token *) * type_capacity);
+							type_tokens = realloc(type_tokens, sizeof(Token *) * type_capacity);
 						}
-						type_tokens[type_count++] = advance(parser);
+						type_tokens[++type_count] = advance(parser);
 					}
 					skip_whitespace(parser);
 				}
 				break;
 			}
 		}
-
-		/* Add to type tokens */
 		if (type_count >= type_capacity)
 		{
 			type_capacity *= 2;
 			type_tokens = realloc(type_tokens, sizeof(Token *) * type_capacity);
 		}
-		type_tokens[type_count++] = advance(parser);
+		type_tokens[++type_count] = advance(parser);
 		skip_whitespace(parser);
 	}
 
@@ -3093,15 +2812,14 @@ static ASTNode *parse_parameter(Parser *parser)
 		free(type_tokens);
 		return (NULL);
 	}
-
 	param = ast_node_create(NODE_PARAM, name);
+	/* Store type tokens in data field */
 	if (!param)
 	{
 		free(type_tokens);
 		return (NULL);
 	}
 
-	/* Store type tokens in data field */
 	{
 		FunctionData *pdata = malloc(sizeof(FunctionData));
 
@@ -3145,45 +2863,30 @@ static ASTNode *parse_function(Parser *parser)
 	start_pos = parser->current;
 
 	return_type_tokens = malloc(sizeof(Token *) * return_type_capacity);
-	if (!return_type_tokens)
-		return (NULL);
-
 	/* Collect return type tokens */
 	/* Handle type modifiers: unsigned, signed, static, const, etc. */
-	while (peek(parser) && (peek(parser)->type == TOK_UNSIGNED ||
-	       peek(parser)->type == TOK_SIGNED ||
-	       peek(parser)->type == TOK_STATIC ||
-	       peek(parser)->type == TOK_CONST))
+	if (!return_type_tokens)
+		return (NULL);
+	while (peek(parser) && peek(parser)->type == TOK_UNSIGNED || peek(parser)->type == TOK_SIGNED || peek(parser)->type == TOK_STATIC || peek(parser)->type == TOK_CONST)
 	{
 		if (return_type_count >= return_type_capacity)
 		{
 			return_type_capacity *= 2;
-			return_type_tokens = realloc(return_type_tokens,
-				sizeof(Token *) * return_type_capacity);
+			return_type_tokens = realloc(return_type_tokens, sizeof(Token *) * return_type_capacity);
 		}
-		return_type_tokens[return_type_count++] = advance(parser);
+		return_type_tokens[++return_type_count] = advance(parser);
 		skip_whitespace(parser);
 	}
 
 	/* Accept base type keywords OR identifiers (for typedef'd types like node_t) */
-	if (peek(parser) && (peek(parser)->type == TOK_INT ||
-	    peek(parser)->type == TOK_VOID ||
-	    peek(parser)->type == TOK_CHAR_KW ||
-	    peek(parser)->type == TOK_LONG ||
-	    peek(parser)->type == TOK_SHORT ||
-	    peek(parser)->type == TOK_FLOAT_KW ||
-	    peek(parser)->type == TOK_DOUBLE ||
-	    peek(parser)->type == TOK_STRUCT ||
-	    peek(parser)->type == TOK_ENUM ||
-	    peek(parser)->type == TOK_IDENTIFIER))
+	if (peek(parser) && peek(parser)->type == TOK_INT || peek(parser)->type == TOK_VOID || peek(parser)->type == TOK_CHAR_KW || peek(parser)->type == TOK_LONG || peek(parser)->type == TOK_SHORT || peek(parser)->type == TOK_FLOAT_KW || peek(parser)->type == TOK_DOUBLE || peek(parser)->type == TOK_STRUCT || peek(parser)->type == TOK_ENUM || peek(parser)->type == TOK_IDENTIFIER)
 	{
 		if (return_type_count >= return_type_capacity)
 		{
 			return_type_capacity *= 2;
-			return_type_tokens = realloc(return_type_tokens,
-				sizeof(Token *) * return_type_capacity);
+			return_type_tokens = realloc(return_type_tokens, sizeof(Token *) * return_type_capacity);
 		}
-		return_type_tokens[return_type_count++] = advance(parser);
+		return_type_tokens[++return_type_count] = advance(parser);
 	}
 	else
 	{
@@ -3195,48 +2898,40 @@ static ASTNode *parse_function(Parser *parser)
 	skip_whitespace(parser);
 
 	/* Handle multi-word types like "long long", "long int", etc. */
-	while (peek(parser) && (peek(parser)->type == TOK_LONG ||
-	       peek(parser)->type == TOK_INT ||
-	       peek(parser)->type == TOK_DOUBLE))
+	while (peek(parser) && peek(parser)->type == TOK_LONG || peek(parser)->type == TOK_INT || peek(parser)->type == TOK_DOUBLE)
 	{
 		if (return_type_count >= return_type_capacity)
 		{
 			return_type_capacity *= 2;
-			return_type_tokens = realloc(return_type_tokens,
-				sizeof(Token *) * return_type_capacity);
+			return_type_tokens = realloc(return_type_tokens, sizeof(Token *) * return_type_capacity);
 		}
-		return_type_tokens[return_type_count++] = advance(parser);
+		return_type_tokens[++return_type_count] = advance(parser);
 		skip_whitespace(parser);
 	}
 
 	/* Handle struct/enum type names */
-	if (return_type_count > 0 &&
-	    (return_type_tokens[return_type_count - 1]->type == TOK_STRUCT ||
-	     return_type_tokens[return_type_count - 1]->type == TOK_ENUM))
+	/* Handle pointer types */
+	if (return_type_count > 0 && return_type_tokens[return_type_count - 1]->type == TOK_STRUCT || return_type_tokens[return_type_count - 1]->type == TOK_ENUM)
 	{
 		if (match(parser, TOK_IDENTIFIER))
 		{
 			if (return_type_count >= return_type_capacity)
 			{
 				return_type_capacity *= 2;
-				return_type_tokens = realloc(return_type_tokens,
-					sizeof(Token *) * return_type_capacity);
+				return_type_tokens = realloc(return_type_tokens, sizeof(Token *) * return_type_capacity);
 			}
-			return_type_tokens[return_type_count++] = advance(parser);
+			return_type_tokens[++return_type_count] = advance(parser);
 			skip_whitespace(parser);
 		}
 	}
-
-	/* Handle pointer types */
 	while (match(parser, TOK_STAR))
 	{
 		if (return_type_count >= return_type_capacity)
 		{
 			return_type_capacity *= 2;
-			return_type_tokens = realloc(return_type_tokens,
-				sizeof(Token *) * return_type_capacity);
+			return_type_tokens = realloc(return_type_tokens, sizeof(Token *) * return_type_capacity);
 		}
-		return_type_tokens[return_type_count++] = advance(parser);
+		return_type_tokens[++return_type_count] = advance(parser);
 		skip_whitespace(parser);
 	}
 
@@ -3247,7 +2942,6 @@ static ASTNode *parse_function(Parser *parser)
 		parser->current = start_pos;
 		return (NULL);
 	}
-
 	name = advance(parser);
 	skip_whitespace(parser);
 
@@ -3258,16 +2952,14 @@ static ASTNode *parse_function(Parser *parser)
 		parser->current = start_pos;
 		return (NULL);
 	}
-
 	func = ast_node_create(NODE_FUNCTION, name);
+	/* Attach any pending comments to the function */
 	if (!func)
 	{
 		free(return_type_tokens);
 		parser->current = start_pos;
 		return (NULL);
 	}
-
-	/* Attach any pending comments to the function */
 	attach_pending_comments(parser, func);
 
 	advance(parser); /* consume ( */
@@ -3282,7 +2974,6 @@ static ASTNode *parse_function(Parser *parser)
 		parser->current = start_pos;
 		return (NULL);
 	}
-
 	while (!is_at_end(parser) && !match(parser, TOK_RPAREN))
 	{
 		ASTNode *param = parse_parameter(parser);
@@ -3294,9 +2985,8 @@ static ASTNode *parse_function(Parser *parser)
 				param_capacity *= 2;
 				params = realloc(params, sizeof(ASTNode *) * param_capacity);
 			}
-			params[param_count++] = param;
+			params[++param_count] = param;
 		}
-
 		skip_whitespace(parser);
 		if (match(parser, TOK_COMMA))
 		{
@@ -3336,18 +3026,16 @@ static ASTNode *parse_function(Parser *parser)
 	skip_gnu_attributes(parser);
 
 	/* Check if this is a prototype (ends with ;) or definition (has body) */
+	/* Parse function body */
 	if (match(parser, TOK_SEMICOLON))
 	{
 		/* Function prototype - no body */
 		advance(parser);
 		return (func);
 	}
-
-	/* Parse function body */
 	body = parse_block(parser);
 	if (body)
 		ast_node_add_child(func, body);
-
 	return (func);
 }
 
@@ -3366,30 +3054,29 @@ static ASTNode *parse_program(Parser *parser)
 	program = ast_node_create(NODE_PROGRAM, NULL);
 	if (!program)
 		return (NULL);
-
 	while (!is_at_end(parser))
 	{
 		blank_lines = skip_whitespace(parser);
 		int section_start = parser->whitespace_start;
 
+		/* Parse preprocessor directives */
 		if (is_at_end(parser))
 			break;
-
-		/* Parse preprocessor directives */
+		/* Try to parse typedef */
 		if (match(parser, TOK_PREPROCESSOR))
 		{
 			Token *pp_token = advance(parser);
 			ASTNode *pp_node = ast_node_create(NODE_PREPROCESSOR, pp_token);
+
 			if (pp_node)
 			{
 				attach_pending_comments(parser, pp_node);
-				pp_node->blank_lines_before = (blank_lines > 0 ? 1 : 0);
+				pp_node->blank_lines_before = blank_lines > 0 ? 1 : 0;
 				ast_node_add_child(program, pp_node);
 			}
 			continue;
 		}
-
-		/* Try to parse typedef */
+		/* Try to parse struct - but check if it's a definition or function return type */
 		if (match(parser, TOK_TYPEDEF))
 		{
 			start_errors = parser->error_count;
@@ -3397,7 +3084,7 @@ static ASTNode *parse_program(Parser *parser)
 			if (func && parser->error_count == start_errors)
 			{
 				attach_pending_comments(parser, func);
-				func->blank_lines_before = (blank_lines > 0 ? 1 : 0);
+				func->blank_lines_before = blank_lines > 0 ? 1 : 0;
 				ast_node_add_child(program, func);
 			}
 			else
@@ -3409,8 +3096,7 @@ static ASTNode *parse_program(Parser *parser)
 			}
 			continue;
 		}
-
-		/* Try to parse struct - but check if it's a definition or function return type */
+		/* Try to parse enum */
 		if (match(parser, TOK_STRUCT))
 		{
 			/* Look ahead to determine if this is a struct definition or function */
@@ -3421,17 +3107,15 @@ static ASTNode *parse_program(Parser *parser)
 			/* struct name { ... } is named struct def */
 			/* struct name; is forward declaration */
 			/* struct name *func() or struct name func() is function */
-			if ((next1 && next1->type == TOK_LBRACE) ||
-			    (next2 && next2->type == TOK_LBRACE) ||
-			    (next1 && next1->type == TOK_IDENTIFIER &&
-			     next2 && next2->type == TOK_SEMICOLON))
+			/* Otherwise fall through to function parsing */
+			if (next1 && next1->type == TOK_LBRACE || next2 && next2->type == TOK_LBRACE || next1 && next1->type == TOK_IDENTIFIER && next2 && next2->type == TOK_SEMICOLON)
 			{
 				start_errors = parser->error_count;
 				func = parse_struct_definition(parser);
 				if (func && parser->error_count == start_errors)
 				{
 					attach_pending_comments(parser, func);
-					func->blank_lines_before = (blank_lines > 0 ? 1 : 0);
+					func->blank_lines_before = blank_lines > 0 ? 1 : 0;
 					ast_node_add_child(program, func);
 					skip_whitespace(parser);
 					if (match(parser, TOK_SEMICOLON))
@@ -3446,10 +3130,8 @@ static ASTNode *parse_program(Parser *parser)
 				}
 				continue;
 			}
-			/* Otherwise fall through to function parsing */
 		}
-
-		/* Try to parse enum */
+		/* Try to parse union */
 		if (match(parser, TOK_ENUM))
 		{
 			start_errors = parser->error_count;
@@ -3457,7 +3139,7 @@ static ASTNode *parse_program(Parser *parser)
 			if (func && parser->error_count == start_errors)
 			{
 				attach_pending_comments(parser, func);
-				func->blank_lines_before = (blank_lines > 0 ? 1 : 0);
+				func->blank_lines_before = blank_lines > 0 ? 1 : 0;
 				ast_node_add_child(program, func);
 				skip_whitespace(parser);
 				if (match(parser, TOK_SEMICOLON))
@@ -3472,8 +3154,7 @@ static ASTNode *parse_program(Parser *parser)
 			}
 			continue;
 		}
-
-		/* Try to parse union */
+		/* Try to parse a function first */
 		if (match(parser, TOK_UNION))
 		{
 			start_errors = parser->error_count;
@@ -3481,7 +3162,7 @@ static ASTNode *parse_program(Parser *parser)
 			if (func && parser->error_count == start_errors)
 			{
 				attach_pending_comments(parser, func);
-				func->blank_lines_before = (blank_lines > 0 ? 1 : 0);
+				func->blank_lines_before = blank_lines > 0 ? 1 : 0;
 				ast_node_add_child(program, func);
 				skip_whitespace(parser);
 				if (match(parser, TOK_SEMICOLON))
@@ -3496,13 +3177,11 @@ static ASTNode *parse_program(Parser *parser)
 			}
 			continue;
 		}
-
-		/* Try to parse a function first */
 		start_errors = parser->error_count;
 		func = parse_function(parser);
 		if (func && parser->error_count == start_errors)
 		{
-			func->blank_lines_before = (blank_lines > 0 ? 1 : 0);
+			func->blank_lines_before = blank_lines > 0 ? 1 : 0;
 			ast_node_add_child(program, func);
 		}
 		else
@@ -3510,21 +3189,19 @@ static ASTNode *parse_program(Parser *parser)
 			/* Not a function - try parsing as global variable declaration */
 			Token *tok = peek(parser);
 
-			if (tok && (is_type_keyword(tok->type) ||
-			    (tok->type == TOK_IDENTIFIER &&
-			     symbol_is_typedef(parser->symbols, tok->lexeme))))
+			if (tok && is_type_keyword(tok->type) || tok->type == TOK_IDENTIFIER && symbol_is_typedef(parser->symbols, tok->lexeme))
 			{
 				int decl_errors = parser->error_count;
+
 				func = parse_var_declaration(parser);
 				if (func && parser->error_count == decl_errors)
 				{
 					attach_pending_comments(parser, func);
-					func->blank_lines_before = (blank_lines > 0 ? 1 : 0);
+					func->blank_lines_before = blank_lines > 0 ? 1 : 0;
 					ast_node_add_child(program, func);
 					continue;
 				}
 			}
-
 			parser->error_count = start_errors;
 			if (func)
 				ast_node_destroy(func);
@@ -3547,6 +3224,5 @@ ASTNode *parser_parse(Parser *parser)
 {
 	if (!parser)
 		return (NULL);
-
 	return (parse_program(parser));
 }
