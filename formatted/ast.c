@@ -1,6 +1,5 @@
 #include "../include/ast.h"
 #include <stdlib.h>
-
 #define INITIAL_CHILD_CAPACITY 8
 
 /*
@@ -17,7 +16,6 @@ ASTNode *ast_node_create(NodeType type, Token *token)
 	node = malloc(sizeof(ASTNode));
 	if (!node)
 		return (NULL);
-
 	node->type = type;
 	node->token = token;
 
@@ -28,7 +26,6 @@ ASTNode *ast_node_create(NodeType type, Token *token)
 		free(node);
 		return (NULL);
 	}
-
 	node->child_count = 0;
 	node->leading_comments = NULL;
 	node->leading_comment_count = 0;
@@ -50,13 +47,13 @@ void ast_node_destroy(ASTNode *node)
 
 	if (!node)
 		return;
-
-	for (i = 0; i < node->child_count; i++)
+	for (i = 0; i < node->child_count; ++i)
 		ast_node_destroy(node->children[i]);
 
 	free(node->children);
 	free(node->leading_comments);
 	free(node->trailing_comments);
+	/* Note: other node-specific data typically references lexer-owned tokens */
 	if (node->type == NODE_UNPARSED && node->data)
 	{
 		RawSegmentData *segment = (RawSegmentData *)node->data;
@@ -72,7 +69,6 @@ void ast_node_destroy(ASTNode *node)
 	{
 		free(node->data);
 	}
-	/* Note: other node-specific data typically references lexer-owned tokens */
 	free(node);
 }
 
@@ -90,21 +86,17 @@ int ast_node_add_child(ASTNode *parent, ASTNode *child)
 
 	if (!parent || !child)
 		return (-1);
-
 	if (parent->child_count >= parent->child_capacity)
 	{
 		new_capacity = parent->child_capacity * 2;
-		new_children = realloc(parent->children,
-				       sizeof(ASTNode *) * new_capacity);
+		new_children = realloc(parent->children, sizeof(ASTNode *) * new_capacity);
 		if (!new_children)
 			return (-1);
-
 		parent->children = new_children;
 		parent->child_capacity = new_capacity;
 	}
-
-	parent->children[parent->child_count++] = child;
-	return (0);
+	parent->children[++parent->child_count] = child;
+	return ((0));
 }
 
 /*
@@ -121,18 +113,15 @@ int ast_node_add_leading_comment(ASTNode *node, Token *comment)
 
 	if (!node || !comment)
 		return (-1);
-
 	new_count = node->leading_comment_count + 1;
-	new_comments = realloc(node->leading_comments,
-			       sizeof(Token *) * new_count);
+	new_comments = realloc(node->leading_comments, sizeof(Token *) * new_count);
 	if (!new_comments)
 		return (-1);
-
 	new_comments[node->leading_comment_count] = comment;
 	node->leading_comments = new_comments;
 	node->leading_comment_count = new_count;
 
-	return (0);
+	return ((0));
 }
 
 /*
@@ -149,16 +138,13 @@ int ast_node_add_trailing_comment(ASTNode *node, Token *comment)
 
 	if (!node || !comment)
 		return (-1);
-
 	new_count = node->trailing_comment_count + 1;
-	new_comments = realloc(node->trailing_comments,
-			       sizeof(Token *) * new_count);
+	new_comments = realloc(node->trailing_comments, sizeof(Token *) * new_count);
 	if (!new_comments)
 		return (-1);
-
 	new_comments[node->trailing_comment_count] = comment;
 	node->trailing_comments = new_comments;
 	node->trailing_comment_count = new_count;
 
-	return (0);
+	return ((0));
 }

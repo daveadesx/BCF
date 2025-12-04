@@ -13,6 +13,8 @@ typedef struct {
 	int pos;
 	int line;
 	int column;
+	int last_line;
+	int last_column;
 
 	Token **tokens;
 	int token_count;
