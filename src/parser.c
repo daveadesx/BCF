@@ -765,6 +765,26 @@ static Token *expect(Parser *parser, TokenType type)
 			(parser->current > 0 && parser->tokens[parser->current - 1] ?
 			 parser->tokens[parser->current - 1]->line : 0);
 
+		/* Attempt targeted recovery for common missing tokens so parsing can continue */
+		if (type == TOK_SEMICOLON)
+		{
+			ASTNode *fallback = recover_statement(parser, parser->current);
+			if (fallback)
+				ast_node_destroy(fallback);
+		}
+		else if (type == TOK_LBRACE)
+		{
+			ASTNode *fallback = recover_top_level(parser, parser->current);
+			if (fallback)
+				ast_node_destroy(fallback);
+		}
+		else if (type == TOK_IDENTIFIER)
+		{
+			ASTNode *fallback = recover_statement(parser, parser->current);
+			if (fallback)
+				ast_node_destroy(fallback);
+		}
+
 		fprintf(stderr, "Parse error (line %d): expected %s, got %s\n",
 			line,
 			token_type_to_string(type),

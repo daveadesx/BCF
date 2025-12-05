@@ -72,14 +72,6 @@ void ast_node_destroy(ASTNode *node)
 	{
 		free(node->data);
 	}
-	else if (node->type == NODE_MEMBER_ACCESS && node->data)
-	{
-		free(node->data);
-	}
-	else if (node->type == NODE_UNARY && node->data)
-	{
-		free(node->data);
-	}
 	/* Note: other node-specific data typically references lexer-owned tokens */
 	free(node);
 }

@@ -1,11 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
-
 #include "symbol_table.h"
-
 #include <stdlib.h>
-
 #include <string.h>
-
 
 /**
  * hash - Simple hash function for symbol names
@@ -13,26 +9,18 @@
  *
  * Return: Hash value (0 to SYMBOL_TABLE_SIZE-1)
  */
-static unsigned int hash (const char * name )
+static unsigned int hash(const char *name)
 {
+	unsigned int h = 0;
 
-	unsigned int h = 0 ;
-
-
-	while (* name )
+	while (*name)
 	{
-
-		h = h * 31 + (unsigned char ) * name ;
-
-		name ++ ;
-
+		h = h * 31 + (unsigned char)*name;
+		++name;
 	}
 
-
-	return (h % SYMBOL_TABLE_SIZE );
-
+	return (h % SYMBOL_TABLE_SIZE);
 }
-
 
 /**
  * symbol_table_create - Create a new symbol table
@@ -40,31 +28,21 @@ static unsigned int hash (const char * name )
  *
  * Return: New symbol table, or NULL on failure
  */
-SymbolTable * symbol_table_create (SymbolTable * parent )
+SymbolTable *symbol_table_create(SymbolTable *parent)
 {
+	SymbolTable *table;
+	int i;
 
-	SymbolTable * table ;
+	table = malloc(sizeof(SymbolTable));
+	if (!table)
+		return (NULL);
+	for (i = 0; i < SYMBOL_TABLE_SIZE; ++i)
+		table->buckets[i] = NULL;
 
-	int i ;
+	table->parent = parent;
 
-
-	table = malloc (sizeof (SymbolTable ));
-
-	if (! table )
-	return (NULL );
-
-
-	for (i = 0 ; i < SYMBOL_TABLE_SIZE ; i ++ )
-	table ->buckets [i ] = NULL ;
-
-
-	table ->parent = parent ;
-
-
-	return (table );
-
+	return (table);
 }
-
 
 /**
  * symbol_table_destroy - Free a symbol table and all its symbols
@@ -72,43 +50,27 @@ SymbolTable * symbol_table_create (SymbolTable * parent )
  *
  * Note: Does NOT destroy parent tables
  */
-void symbol_table_destroy (SymbolTable * table )
+void symbol_table_destroy(SymbolTable *table)
 {
+	Symbol *sym, *next;
+	int i;
 
-	Symbol * sym , * next ;
-
-	int i ;
-
-
-	if (! table )
-	return ;
-
-
-	for (i = 0 ; i < SYMBOL_TABLE_SIZE ; i ++ )
+	if (!table)
+		return;
+	for (i = 0; i < SYMBOL_TABLE_SIZE; ++i)
 	{
-
-		sym = table ->buckets [i ];
-
-		while (sym )
+		sym = table->buckets[i];
+		while (sym)
 		{
-
-			next = sym ->next ;
-
-			free (sym ->name );
-
-			free (sym );
-
-			sym = next ;
-
+			next = sym->next;
+			free(sym->name);
+			free(sym);
+			sym = next;
 		}
-
 	}
 
-
-	free (table );
-
+	free(table);
 }
-
 
 /**
  * symbol_add - Add a symbol to the table
@@ -116,57 +78,35 @@ void symbol_table_destroy (SymbolTable * table )
  * @name: Symbol name (will be copied)
  * @kind: Kind of symbol
  */
-void symbol_add (SymbolTable * table , const char * name , SymbolKind kind )
+void symbol_add(SymbolTable *table, const char *name, SymbolKind kind)
 {
-
-	Symbol * sym ;
-
-	unsigned int h ;
-
-
-	if (! table || ! name )
-	return ;
-
+	Symbol *sym;
+	unsigned int h;
 
 	/* Check if already exists in current scope */
-	h = hash (name );
-
-	for (sym = table ->buckets [h ]; sym ; sym = sym ->next )
+	if (!table || !name)
+		return;
+	h = hash(name);
+	for (sym = table->buckets[h]; sym; sym = sym->next)
 	{
-
-		if (strcmp (sym ->name , name ) == 0 )
-		return ;
-		/* Already exists, don't duplicate */
+		if (strcmp(sym->name, name) == 0)
+			return; /* Already exists, don't duplicate */
 	}
-
 
 	/* Create new symbol */
-	sym = malloc (sizeof (Symbol ));
-
-	if (! sym )
-	return ;
-
-
-	sym ->name = strdup (name );
-
-	if (! sym ->name )
+	sym = malloc(sizeof(Symbol));
+	if (!sym)
+		return;
+	sym->name = strdup(name);
+	if (!sym->name)
 	{
-
-		free (sym );
-
-		return ;
-
+		free(sym);
+		return;
 	}
-
-
-	sym ->kind = kind ;
-
-	sym ->next = table ->buckets [h ];
-
-	table ->buckets [h ] = sym ;
-
+	sym->kind = kind;
+	sym->next = table->buckets[h];
+	table->buckets[h] = sym;
 }
-
 
 /**
  * symbol_lookup - Look up a symbol by name
@@ -175,40 +115,26 @@ void symbol_add (SymbolTable * table , const char * name , SymbolKind kind )
  *
  * Return: Symbol if found, NULL otherwise
  */
-Symbol * symbol_lookup (SymbolTable * table , const char * name )
+Symbol *symbol_lookup(SymbolTable *table, const char *name)
 {
+	Symbol *sym;
+	unsigned int h;
 
-	Symbol * sym ;
-
-	unsigned int h ;
-
-
-	if (! name )
-	return (NULL );
-
-
-	while (table )
+	if (!name)
+		return (NULL);
+	while (table)
 	{
-
-		h = hash (name );
-
-		for (sym = table ->buckets [h ]; sym ; sym = sym ->next )
+		h = hash(name);
+		for (sym = table->buckets[h]; sym; sym = sym->next)
 		{
-
-			if (strcmp (sym ->name , name ) == 0 )
-			return (sym );
-
+			if (strcmp(sym->name, name) == 0)
+				return (sym);
 		}
-
-		table = table ->parent ;
-
+		table = table->parent;
 	}
 
-
-	return (NULL );
-
+	return (NULL);
 }
-
 
 /**
  * symbol_is_typedef - Check if a name is a typedef'd type
@@ -217,13 +143,9 @@ Symbol * symbol_lookup (SymbolTable * table , const char * name )
  *
  * Return: 1 if typedef, 0 otherwise
  */
-int symbol_is_typedef (SymbolTable * table , const char * name )
+int symbol_is_typedef(SymbolTable *table, const char *name)
 {
+	Symbol *sym = symbol_lookup(table, name);
 
-	Symbol * sym = symbol_lookup (table , name );
-
-
-	return (sym && sym ->kind == SYM_TYPEDEF );
-
+	return (sym && sym->kind == SYM_TYPEDEF);
 }
-
