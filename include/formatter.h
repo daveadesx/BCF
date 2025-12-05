@@ -1,7 +1,7 @@
 #ifndef FORMATTER_H
 #define FORMATTER_H
 
-#include "ast.h"
+#include "token.h"
 #include <stdio.h>
 
 /*
@@ -26,6 +26,6 @@ Formatter *formatter_create(FILE *output);
 void formatter_destroy(Formatter *formatter);
 
 /* Main formatting */
-int formatter_format(Formatter *formatter, ASTNode *ast);
+int formatter_format(Formatter *formatter, Token **tokens, int token_count);
 
 #endif /* FORMATTER_H */

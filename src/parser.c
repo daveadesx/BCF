@@ -765,26 +765,6 @@ static Token *expect(Parser *parser, TokenType type)
 			(parser->current > 0 && parser->tokens[parser->current - 1] ?
 			 parser->tokens[parser->current - 1]->line : 0);
 
-		/* Attempt targeted recovery for common missing tokens so parsing can continue */
-		if (type == TOK_SEMICOLON)
-		{
-			ASTNode *fallback = recover_statement(parser, parser->current);
-			if (fallback)
-				ast_node_destroy(fallback);
-		}
-		else if (type == TOK_LBRACE)
-		{
-			ASTNode *fallback = recover_top_level(parser, parser->current);
-			if (fallback)
-				ast_node_destroy(fallback);
-		}
-		else if (type == TOK_IDENTIFIER)
-		{
-			ASTNode *fallback = recover_statement(parser, parser->current);
-			if (fallback)
-				ast_node_destroy(fallback);
-		}
-
 		fprintf(stderr, "Parse error (line %d): expected %s, got %s\n",
 			line,
 			token_type_to_string(type),
@@ -1279,6 +1259,7 @@ static ASTNode *parse_postfix(Parser *parser)
 		{
 			ASTNode *member = NULL;
 			Token *name_token = NULL;
+			MemberAccessData *access_data;
 
 			advance(parser); /* consume . or -> */
 			skip_whitespace(parser);
@@ -1289,6 +1270,14 @@ static ASTNode *parse_postfix(Parser *parser)
 				return (NULL);
 
 			member = ast_node_create(NODE_MEMBER_ACCESS, name_token);
+			if (!member)
+				return (NULL);
+			access_data = malloc(sizeof(MemberAccessData));
+			if (access_data)
+			{
+				access_data->uses_arrow = (token->type == TOK_ARROW);
+				member->data = access_data;
+			}
 			/* first child is the object, second implicitly the name via token */
 			ast_node_add_child(member, node);
 			node = member;
@@ -1296,14 +1285,22 @@ static ASTNode *parse_postfix(Parser *parser)
 		}
 
 		/* Postfix ++ or -- */
-		if (token->type == TOK_INCREMENT || token->type == TOK_DECREMENT)
-		{
-			ASTNode *postfix = ast_node_create(NODE_UNARY, token);
-			advance(parser);
-			ast_node_add_child(postfix, node);
-			node = postfix;
-			continue;
-		}
+			if (token->type == TOK_INCREMENT || token->type == TOK_DECREMENT)
+			{
+				ASTNode *postfix = ast_node_create(NODE_UNARY, token);
+				UnaryData *unary_data;
+
+				advance(parser);
+				unary_data = malloc(sizeof(UnaryData));
+				if (unary_data)
+				{
+					unary_data->is_postfix = 1;
+					postfix->data = unary_data;
+				}
+				ast_node_add_child(postfix, node);
+				node = postfix;
+				continue;
+			}
 
 		break;
 	}

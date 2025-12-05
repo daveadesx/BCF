@@ -1,6 +1,5 @@
 #define _GNU_SOURCE
 #include "../include/lexer.h"
-#include "../include/parser.h"
 #include "../include/formatter.h"
 #include "../include/utils.h"
 #include <stdio.h>
@@ -55,53 +54,48 @@ static void print_version(void)
 static char *format_to_string(const char *source, size_t *out_len)
 {
 	Lexer *lexer;
-	Parser *parser;
+	Formatter *formatter = NULL;
 	char *result = NULL;
-	FILE *mem_stream;
+	FILE *mem_stream = NULL;
 	size_t size = 0;
+	int status = -1;
 
 	lexer = lexer_create(source);
 	if (!lexer)
 		return (NULL);
 
 	if (lexer_tokenize(lexer) < 0)
-	{
-		lexer_destroy(lexer);
-		return (NULL);
-	}
+		goto cleanup;
 
-	parser = parser_create(lexer_get_tokens(lexer),
-			       lexer_get_token_count(lexer));
-	if (!parser)
-	{
-		lexer_destroy(lexer);
-		return (NULL);
-	}
+	mem_stream = open_memstream(&result, &size);
+	if (!mem_stream)
+		goto cleanup;
 
-	/* Parse and format to memory stream */
-	{
-		ASTNode *ast = parser_parse(parser);
+	formatter = formatter_create(mem_stream);
+	if (!formatter)
+		goto cleanup;
 
-		if (ast)
-		{
-			mem_stream = open_memstream(&result, &size);
-			if (mem_stream)
-			{
-				Formatter *formatter = formatter_create(mem_stream);
+	status = formatter_format(formatter,
+				   lexer_get_tokens(lexer),
+				   lexer_get_token_count(lexer));
+	formatter_destroy(formatter);
+	formatter = NULL;
+	fclose(mem_stream);
+	mem_stream = NULL;
 
-				if (formatter)
-				{
-					formatter_format(formatter, ast);
-					formatter_destroy(formatter);
-				}
-				fclose(mem_stream);
-			}
-			ast_node_destroy(ast);
-		}
-	}
-
-	parser_destroy(parser);
+cleanup:
+	if (formatter)
+		formatter_destroy(formatter);
+	if (mem_stream)
+		fclose(mem_stream);
 	lexer_destroy(lexer);
+
+	if (status < 0)
+	{
+		free(result);
+		result = NULL;
+		size = 0;
+	}
 
 	if (out_len)
 		*out_len = size;

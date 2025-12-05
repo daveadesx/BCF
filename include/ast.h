@@ -95,6 +95,14 @@ typedef struct FuncPtrData {
 	int param_count;
 } FuncPtrData;
 
+typedef struct MemberAccessData {
+	int uses_arrow;  /* 1 if operator was ->, 0 if . */
+} MemberAccessData;
+
+typedef struct UnaryData {
+	int is_postfix;  /* 1 for postfix ++/--, 0 for prefix */
+} UnaryData;
+
 /*
  * AST node structure
  */
